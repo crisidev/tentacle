@@ -81,7 +81,7 @@ jobs:
       # (forks included) build and test, and never publish.
       - name: Login to Docker Hub
         if: github.event_name == 'push' && github.repository == 'crisidev/tentacle'
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
