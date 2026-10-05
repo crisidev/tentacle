@@ -1,0 +1,29 @@
+# What the Jellyfin server's Deployment needs for Tentacle (a strategic merge
+# patch: kubectl -n jellyfin patch deployment jellyfin --patch-file this-file).
+# Its /config must be the "jellyfin-config" volume the workers mount, so the
+# shared directories are the same files on both sides.
+spec:
+  template:
+    spec:
+      containers:
+        - name: jellyfin
+          env:
+            # Points Jellyfin at the shim and installs the plugin. Do not set
+            # FFMPEG_PATH yourself. Pin the digest from the release notes.
+            - { name: DOCKER_MODS, value: "crisidev/tentacle:server-1.0.0" }
+            # Trickplay and image extraction write under $TMPDIR/jellyfin, which
+            # must be shared; /tmp is not.
+            - { name: TMPDIR, value: /config/cache/temp }
+            - name: TENTACLE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: TENTACLE_TOKEN
+              valueFrom:
+                secretKeyRef: { name: tentacle-token, key: token }
+            # Optional: the token being rotated out stays valid while this is set.
+            - name: TENTACLE_PREVIOUS_TOKEN
+              valueFrom:
+                secretKeyRef: { name: tentacle-token, key: previous, optional: true }
+          ports:
+            - { name: tentacle, containerPort: 8097 }

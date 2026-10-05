@@ -1,0 +1,27 @@
+---
+# Jellyfin plugin repository metadata (JPRM). Only the plugin project is built
+# for the repository; the tentacle binary ships in the mod images.
+# The full history is in CHANGELOG.md; scripts/release.sh reads the release notes from it.
+name: "Tentacle"
+guid: "3a65d525-990c-4f73-89e9-a0d1500a53d2"
+version: "1.0.0.0"
+targetAbi: "12.1.0.0"
+framework: "net10.0"
+owner: "crisidev"
+overview: "Native remote transcoding: run Jellyfin's ffmpeg jobs on worker nodes"
+description: >
+  Tentacle brokers Jellyfin's ffmpeg jobs to worker nodes (tentacles) that
+  register with the plugin, or runs them locally. It replaces rffmpeg: no ssh,
+  no state to go stale, Prometheus metrics, and checks that every worker really
+  shares the paths and ffmpeg build it needs.
+category: "General"
+artifacts:
+  - "Jellyfin.Plugin.Tentacle.dll"
+  - "Tentacle.Broker.dll"
+  - "Tentacle.Protocol.dll"
+changelog: >
+  1.0.0: First public release, with full documentation, Docker Compose and
+  Kubernetes examples, and releases on GitHub. Security hardening: jobs inherit
+  only the agent's locale, PATH and GPU driver variables; driver names must be
+  bare words; verification resolves symlinks and ".."; the shim socket fails
+  closed; the agent port no longer serves job history. See CHANGELOG.md for the history.

@@ -1,0 +1,100 @@
+name: ci
+
+# Pull requests and pushes to main: unit tests, alert-rule tests, the plugin,
+# the NativeAOT binary (amd64 and arm64), the mod images, then the end-to-end
+# suites and a short soak against Jellyfin 12.1 in Docker. Pushes to main also
+# publish the :server-main / :worker-main mod images to Docker Hub.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: docker.io/crisidev/tentacle
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      # clang targets arm64 too; the GNU cross linker and libc link the arm64 binary.
+      - name: NativeAOT toolchain (amd64 and arm64)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang zlib1g-dev zip jq gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross
+
+      - name: Version
+        id: version
+        run: echo "version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props)" >> "$GITHUB_OUTPUT"
+
+      - name: Alert rules (promtool test rules)
+        run: scripts/build.sh rules
+
+      - name: Test, plugin, AOT binary, mod images
+        env:
+          TENTACLE_VERSION: ${{ steps.version.outputs.version }}
+          TENTACLE_AOT_LOCAL: '1'
+        run: scripts/build.sh test plugin cli mod
+
+      - name: M0 smoke (Jellyfin 12.1 + worker)
+        run: tests/e2e/m0-smoke.sh "${{ steps.version.outputs.version }}"
+
+      - name: M1 e2e (HLS on a tentacle, seek, stop, tentacle loss, metrics)
+        run: tests/e2e/m1-e2e.sh "${{ steps.version.outputs.version }}"
+
+      - name: M2 e2e (verification, extraction, trickplay, drain)
+        run: tests/e2e/m2-e2e.sh "${{ steps.version.outputs.version }}"
+
+      - name: M5 e2e (TLS, token rotation)
+        run: tests/e2e/m5-e2e.sh "${{ steps.version.outputs.version }}"
+
+      - name: Soak (chaos under load, leak checks)
+        env:
+          SOAK_SECONDS: '240'
+        run: tests/e2e/soak.sh "${{ steps.version.outputs.version }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tentacle-${{ steps.version.outputs.version }}
+          path: |
+            dist/tentacle_*.zip
+            dist/cli/tentacle
+            dist/cli-arm64/tentacle
+
+      # Only pushes to this repository's main reach the secrets: pull requests
+      # (forks included) build and test, and never publish.
+      - name: Login to Docker Hub
+        if: github.event_name == 'push' && github.repository == 'crisidev/tentacle'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+        if: github.event_name == 'push' && github.repository == 'crisidev/tentacle'
+
+      # One multi-arch image per role (amd64 + arm64): the mod loader picks the
+      # host's architecture. Nothing runs during the build, so no emulation.
+      - name: Push mod images (:server-main, :worker-main)
+        if: github.event_name == 'push' && github.repository == 'crisidev/tentacle'
+        run: |
+          for role in server worker; do
+            docker buildx build -q --provenance=false --platform linux/amd64,linux/arm64 -f mod/Dockerfile --target "${role}" \
+              -t "${IMAGE}:${role}-main" --push dist/mod
+          done

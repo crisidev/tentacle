@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The broker core: ASP.NET Core only, no Jellyfin references, so integration
+    tests can host it without a Jellyfin server. The plugin is a thin adapter.
+  -->
+  <PropertyGroup>
+    <RootNamespace>Tentacle.Broker</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <!-- Jellyfin ships the same version: the plugin package leaves it out and shares Jellyfin's registry. -->
+    <PackageReference Include="prometheus-net" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Tentacle.Protocol/Tentacle.Protocol.csproj" />
+  </ItemGroup>
+
+</Project>

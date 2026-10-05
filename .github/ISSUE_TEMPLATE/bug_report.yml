@@ -1,0 +1,49 @@
+name: Bug report
+description: Something does not work as described
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Tentacle version
+      description: Dashboard → Tentacle shows it.
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: input
+    id: jellyfin
+    attributes:
+      label: Jellyfin version and image
+      placeholder: linuxserver/jellyfin:version-12.1ubu2604
+    validations:
+      required: true
+  - type: dropdown
+    id: deploy
+    attributes:
+      label: How do you run it
+      options:
+        - Docker / Compose
+        - Kubernetes
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Server and tentacles
+      description: How many tentacles, their GPUs (vendor, model) and the server's hardware acceleration setting.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >-
+        The tentacle_job lines from Jellyfin's log, the agent's [tentacle] lines and, for a failed
+        transcode, FFmpeg.Transcode-*.log. Remove anything private (paths, user names, tokens).
+      render: text

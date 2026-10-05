@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Shared by the plugin (JIT, inside Jellyfin) and the tentacle binary (NativeAOT). -->
+  <PropertyGroup>
+    <RootNamespace>Tentacle.Protocol</RootNamespace>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+</Project>

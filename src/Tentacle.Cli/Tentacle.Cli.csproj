@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The multi-call `tentacle` binary. Invoked as `ffmpeg`/`ffprobe` (symlinks) it is
+    the shim Jellyfin runs; invoked as `tentacle <command>` it is the worker agent
+    and its helpers. Published with NativeAOT: fast start, no runtime needed.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Tentacle.Cli</RootNamespace>
+    <AssemblyName>tentacle</AssemblyName>
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+    <StripSymbols>true</StripSymbols>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Tentacle.Protocol/Tentacle.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Tentacle.Cli.Tests" />
+  </ItemGroup>
+
+</Project>

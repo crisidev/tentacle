@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Tentacle</title>
+</head>
+<body>
+    <div id="TentacleConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-select,emby-checkbox">
+        <style>
+            /* Native Jellyfin look: its fonts, colours and controls. Colour only marks state,
+               always next to a word. Values read as plain text, labels as muted text. */
+            #TentacleConfigPage { --t-muted: rgba(128,128,128,.95); --t-line: rgba(128,128,128,.22); --t-fill: rgba(128,128,128,.10);
+                --t-ok: #4caf50; --t-warn: #e0a030; --t-bad: #e5534b; --t-info: #3d9be9; }
+            #TentacleConfigPage .t-wrap { max-width: 72em; }
+            #TentacleConfigPage .t-lede { color: var(--t-muted); margin: .2em 0 1em; max-width: 46em; line-height: 1.45; }
+            #TentacleConfigPage section { margin: 2.2em 0 0; }
+            #TentacleConfigPage h3.t-h { margin: 0 0 .25em; font-weight: 500; font-size: 1.25em; }
+            #TentacleConfigPage .t-sub { color: var(--t-muted); margin: 0 0 .9em; font-size: .92em; max-width: 52em; line-height: 1.45; }
+
+            /* State words */
+            #TentacleConfigPage .t-state { display: inline-flex; align-items: center; gap: .4em; font-weight: 500; }
+            #TentacleConfigPage .t-state::before { content: ""; width: .55em; height: .55em; border-radius: 50%; background: var(--t-muted); }
+            #TentacleConfigPage .t-state.ok::before { background: var(--t-ok); }
+            #TentacleConfigPage .t-state.warn::before { background: var(--t-warn); }
+            #TentacleConfigPage .t-state.bad::before { background: var(--t-bad); }
+            #TentacleConfigPage .t-state.info::before { background: var(--t-info); }
+
+            /* Summary strip: four facts with their labels */
+            #TentacleConfigPage .t-summary { display: flex; flex-wrap: wrap; gap: 0; border: 1px solid var(--t-line); border-radius: 6px; }
+            #TentacleConfigPage .t-summary > div { flex: 1 1 12em; padding: .7em 1em; border-right: 1px solid var(--t-line); }
+            #TentacleConfigPage .t-summary > div:last-child { border-right: 0; }
+            #TentacleConfigPage .t-summary .t-k { display: block; color: var(--t-muted); font-size: .85em; margin-bottom: .15em; }
+            #TentacleConfigPage .t-alert { margin: .8em 0 0; padding: .7em 1em; border-left: 3px solid var(--t-bad); background: var(--t-fill); }
+
+            /* Label / value lists */
+            #TentacleConfigPage dl.t-facts { display: grid; grid-template-columns: minmax(9em, max-content) 1fr; gap: .45em 1.5em; margin: 0; }
+            #TentacleConfigPage dl.t-facts dt { color: var(--t-muted); }
+            #TentacleConfigPage dl.t-facts dd { margin: 0; overflow-wrap: anywhere; }
+            #TentacleConfigPage code, #TentacleConfigPage .t-mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: .88em; }
+            #TentacleConfigPage ul.t-paths { list-style: none; margin: 0; padding: 0; }
+            #TentacleConfigPage ul.t-paths li { margin: 0 0 .15em; }
+            #TentacleConfigPage .t-note { color: var(--t-muted); font-size: .88em; }
+
+            /* Tentacles */
+            #TentacleConfigPage .t-nodes { display: grid; grid-template-columns: repeat(auto-fill, minmax(21em, 1fr)); gap: 1em; }
+            #TentacleConfigPage .t-node { border: 1px solid var(--t-line); border-radius: 6px; padding: 1em 1.1em .9em; }
+            #TentacleConfigPage .t-node header { display: flex; align-items: baseline; justify-content: space-between; gap: 1em; margin-bottom: .8em; }
+            #TentacleConfigPage .t-node .t-name { font-size: 1.15em; font-weight: 600; }
+            #TentacleConfigPage .t-node header .t-state { white-space: nowrap; }
+            #TentacleConfigPage .t-role { display: inline-block; white-space: nowrap; font-size: .68em; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; padding: .1em .55em; margin-left: .6em; border-radius: 999px; border: 1px solid var(--t-line); color: var(--t-muted); vertical-align: .15em; }
+            #TentacleConfigPage .t-role.server { border-color: var(--t-info); color: var(--t-info); }
+            #TentacleConfigPage .t-table .t-role { margin-left: .4em; vertical-align: .1em; }
+            #TentacleConfigPage .t-node.server { border-color: var(--t-info); box-shadow: inset 3px 0 0 var(--t-info); }
+            #TentacleConfigPage .t-node > p.t-note { margin: 0 0 .8em; line-height: 1.4; }
+            #TentacleConfigPage .t-meter { margin: 0 0 .7em; }
+            #TentacleConfigPage .t-meter .t-label { display: flex; justify-content: space-between; font-size: .88em; margin-bottom: .25em; }
+            #TentacleConfigPage .t-meter .t-label span:first-child { color: var(--t-muted); }
+            #TentacleConfigPage .t-bar { height: .45em; background: var(--t-fill); border-radius: 3px; overflow: hidden; }
+            #TentacleConfigPage .t-bar > i { display: block; height: 100%; background: #00a4dc; }
+            #TentacleConfigPage .t-node dl.t-facts { font-size: .9em; grid-template-columns: max-content 1fr; margin: .9em 0 .4em; }
+            #TentacleConfigPage details > summary { cursor: pointer; }
+            #TentacleConfigPage .t-checks { list-style: none; margin: .5em 0 0; padding: 0; font-size: .88em; }
+            #TentacleConfigPage .t-checks li { padding: .3em 0; border-top: 1px solid var(--t-line); display: grid; grid-template-columns: 1.3em 1fr; }
+            #TentacleConfigPage .t-checks .t-why { grid-column: 2; color: var(--t-muted); }
+            #TentacleConfigPage .t-node footer { margin-top: .8em; display: flex; justify-content: space-between; align-items: center; gap: 1em; }
+            #TentacleConfigPage .t-empty { padding: 1.2em; border: 1px dashed var(--t-line); border-radius: 6px; color: var(--t-muted); }
+
+            /* Tables */
+            #TentacleConfigPage table.t-table { width: 100%; border-collapse: collapse; font-size: .92em; }
+            #TentacleConfigPage .t-table th { text-align: left; font-weight: 500; color: var(--t-muted); padding: .45em .7em; border-bottom: 1px solid var(--t-line); white-space: nowrap; }
+            #TentacleConfigPage .t-table td { padding: .55em .7em; border-bottom: 1px solid var(--t-line); vertical-align: top; }
+            #TentacleConfigPage .t-table td.t-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+            #TentacleConfigPage .t-table .t-who { color: var(--t-muted); font-size: .9em; margin-top: .15em; }
+            #TentacleConfigPage .t-table tr.t-job { cursor: pointer; }
+            #TentacleConfigPage .t-table tr.t-job:hover td { background: var(--t-fill); }
+            #TentacleConfigPage .t-table tr.t-detail td { background: var(--t-fill); font-size: .9em; }
+            #TentacleConfigPage .t-table tr.t-detail code { white-space: pre-wrap; word-break: break-all; }
+            #TentacleConfigPage .t-scroll { overflow-x: auto; }
+
+            /* Settings */
+            #TentacleConfigPage fieldset.t-group { border: 1px solid var(--t-line); border-radius: 6px; padding: 1em 1.2em .4em; margin: 0 0 1.2em; max-width: 52em; }
+            #TentacleConfigPage fieldset.t-group legend { padding: 0 .4em; font-weight: 500; font-size: 1.05em; }
+            #TentacleConfigPage .t-when { display: inline-block; margin-left: .5em; font-size: .78em; padding: .05em .45em; border: 1px solid var(--t-line); border-radius: 3px; color: var(--t-muted); vertical-align: middle; }
+            #TentacleConfigPage textarea.t-textarea { width: 100%; box-sizing: border-box; min-height: 5.5em; padding: .5em; font: inherit; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .9em;
+                background: var(--t-fill); color: inherit; border: 1px solid var(--t-line); border-radius: 3px; }
+            #TentacleConfigPage .t-info { padding: .8em 1em; border-left: 3px solid var(--t-info); background: var(--t-fill); margin: 0 0 1.2em; line-height: 1.45; }
+            #TentacleConfigPage .t-row { display: flex; gap: .8em; align-items: flex-end; flex-wrap: wrap; }
+            #TentacleConfigPage .t-row .inputContainer { flex: 0 0 12em; margin-bottom: 0; }
+            #TentacleConfigPage pre.t-env { margin: .6em 0; padding: .8em 1em; background: var(--t-fill); border-radius: 4px; overflow-x: auto; }
+            #TentacleConfigPage .t-linkbtn { background: none; border: 0; color: #00a4dc; cursor: pointer; padding: 0; font: inherit; }
+            #TentacleConfigPage :focus-visible { outline: 2px solid #00a4dc; outline-offset: 2px; }
+
+            /* Phones: each table row becomes a small block, every value with its label. */
+            @media (max-width: 700px) {
+                #TentacleConfigPage .t-table thead { display: none; }
+                #TentacleConfigPage .t-table, #TentacleConfigPage .t-table tbody, #TentacleConfigPage .t-table tr, #TentacleConfigPage .t-table td { display: block; width: auto; }
+                #TentacleConfigPage .t-table tr { padding: .6em 0; border-bottom: 1px solid var(--t-line); }
+                #TentacleConfigPage .t-table td { border: 0; padding: .15em 0; text-align: left; }
+                #TentacleConfigPage .t-table td.t-num { text-align: left; }
+                #TentacleConfigPage .t-table td[data-l]::before { content: attr(data-l); display: inline-block; min-width: 7.5em; color: var(--t-muted); }
+                #TentacleConfigPage .t-table td.t-lead { font-weight: 500; }
+                #TentacleConfigPage dl.t-facts { grid-template-columns: 1fr; gap: .1em; }
+                #TentacleConfigPage dl.t-facts dd { margin-bottom: .5em; }
+            }
+        </style>
+        <div data-role="content">
+            <div class="content-primary t-wrap">
+                <h2 class="sectionTitle">Tentacle</h2>
+                <p class="t-lede">Runs Jellyfin's ffmpeg jobs on worker nodes ("tentacles") and, as set under Settings, on the Jellyfin server itself.</p>
+
+                <div class="t-summary" id="TSummary" aria-live="polite"></div>
+                <div id="TAlert"></div>
+
+                <section id="TPlayingSection" hidden>
+                    <h3 class="t-h">Running now</h3>
+                    <p class="t-sub">Every ffmpeg job in progress, who it is for and where it runs.</p>
+                    <div class="t-scroll">
+                        <table class="t-table">
+                            <thead><tr><th>What</th><th>For</th><th>Kind</th><th>Runs on</th><th class="t-num">For how long</th></tr></thead>
+                            <tbody id="TRunning"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section>
+                    <h3 class="t-h">Nodes</h3>
+                    <p class="t-sub">Where ffmpeg runs: the Jellyfin server and its tentacles. A tentacle gets a job only after proving it shares the directories that job uses, runs the same ffmpeg and, for hardware encoding, passes a GPU self-test.</p>
+                    <div class="t-nodes" id="TNodes"></div>
+                    <details id="TConnect" style="margin-top:1em">
+                        <summary>Connect a tentacle</summary>
+                        <p class="t-sub" style="margin-top:.6em">Run Jellyfin's image with <code>DOCKER_MODS=crisidev/tentacle:worker-<span id="TModVersion">&lt;version&gt;</span></code>, the shared directories mounted at the same paths as here, and this environment:</p>
+                        <pre class="t-env t-mono" id="TEnv"></pre>
+                        <button is="emby-button" type="button" class="raised emby-button" id="TCopyEnv"><span>Copy environment</span></button>
+                    </details>
+                </section>
+
+                <section>
+                    <h3 class="t-h">Recent jobs</h3>
+                    <p class="t-sub">The last 50 jobs that went through Tentacle. Select a row for its command line. ffprobe runs locally and is not listed.</p>
+                    <div class="t-scroll">
+                        <table class="t-table">
+                            <thead><tr><th>Started</th><th>What</th><th>Kind</th><th>Ran on</th><th>Why there</th><th>Result</th><th class="t-num">Took</th></tr></thead>
+                            <tbody id="TJobs"></tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <section>
+                    <h3 class="t-h">Broker</h3>
+                    <p class="t-sub">Runs inside Jellyfin: it places every job and is where the tentacles connect.</p>
+                    <dl class="t-facts" id="TServer"></dl>
+                </section>
+
+                <section>
+                    <h3 class="t-h">Settings</h3>
+                    <form id="TentacleConfigForm">
+                        <fieldset class="t-group">
+                            <legend>Scheduling</legend>
+                            <div class="selectContainer">
+                                <label class="selectLabel" for="Placement">Where jobs run <span class="t-when">applies now</span></label>
+                                <select is="emby-select" id="Placement" class="emby-select-withcolor emby-select">
+                                    <option value="Active">Active: on tentacles and, as set below, on this server</option>
+                                    <option value="DryRun">Shadow: here, recording where each job would have gone</option>
+                                    <option value="Disabled">Off: everything here</option>
+                                </select>
+                                <div class="fieldDescription">Use Shadow to try Tentacle without moving any work.</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="BackgroundNice">CPU priority of background jobs <span class="t-when">new jobs</span></label>
+                                <input id="BackgroundNice" type="number" is="emby-input" min="0" max="19" />
+                                <div class="fieldDescription">Trickplay and audio analysis run on tentacles with this nice value: 0 is normal, 19 the lowest, so playback always comes first.</div>
+                            </div>
+                            <div class="selectContainer">
+                                <label class="selectLabel" for="LocalRole">This server runs jobs <span class="t-when">applies now</span></label>
+                                <select is="emby-select" id="LocalRole" class="emby-select-withcolor emby-select">
+                                    <option value="backup">As a backup: only what no tentacle can take</option>
+                                    <option value="compete">As a worker: competing with the tentacles by load</option>
+                                    <option value="never">Never when a tentacle could: wait for one, then fail</option>
+                                </select>
+                                <div class="fieldDescription" id="TLocalRoleHelp"></div>
+                            </div>
+                            <div id="TLocalWorker">
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="LocalSlots">Job slots on this server <span class="t-when">applies now</span></label>
+                                <input id="LocalSlots" type="number" is="emby-input" min="1" max="64" />
+                                <div class="fieldDescription">A transcode uses 1 slot, subtitle extraction 0.25, trickplay and analysis 0.5 (at most half the slots).</div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="LocalWeight">Weight of this server <span class="t-when">applies now</span></label>
+                                <input id="LocalWeight" type="number" is="emby-input" min="0.1" max="16" step="0.1" />
+                                <div class="fieldDescription">Compared with each tentacle's <code>TENTACLE_WEIGHT</code> (default 1): at 2 this server carries twice the load of a weight-1 tentacle before that tentacle is preferred; at 0.5, half.</div>
+                            </div>
+                            </div>
+                            <div class="checkboxContainer checkboxContainer-withDescription">
+                                <label class="emby-checkbox-label">
+                                    <input id="StrictFfmpegVersion" type="checkbox" is="emby-checkbox" />
+                                    <span>Refuse tentacles whose ffmpeg patch version differs from this server's</span>
+                                </label>
+                                <div class="fieldDescription checkboxFieldDescription">A different major or minor version is always refused. A different patch version only marks the tentacle degraded unless this is on. <span class="t-when">next check</span></div>
+                            </div>
+                            <div class="checkboxContainer checkboxContainer-withDescription">
+                                <label class="emby-checkbox-label">
+                                    <input id="MetricsNameViewers" type="checkbox" is="emby-checkbox" />
+                                    <span>Name viewers in metrics</span>
+                                </label>
+                                <div class="fieldDescription checkboxFieldDescription">Adds the user, app and item of each running job to <code>tentacle_running_job_start_time_seconds</code>, for Grafana tables of who is transcoding what. Anyone who can read Jellyfin's <code>/metrics</code> would see who watches what, so it is off by default. <span class="t-when">applies now</span></div>
+                            </div>
+                        </fieldset>
+
+                        <fieldset class="t-group">
+                            <legend>Directories ffmpeg uses</legend>
+                            <p class="t-sub">Taken from Jellyfin's settings and your libraries; nothing to create. Each tentacle proves it sees them at the same path as this server. A job only goes to a tentacle that shares every directory it uses.</p>
+                            <ul class="t-paths t-mono" id="TRoots"></ul>
+                            <div style="margin-top:1em">
+                                <label for="ExtraRoots">Also shared <span class="t-when">next check</span></label>
+                                <textarea id="ExtraRoots" class="t-textarea" rows="3" placeholder="/mnt/fonts"></textarea>
+                                <div class="fieldDescription">One directory per line, for paths ffmpeg uses that are not in the list above.</div>
+                            </div>
+                        </fieldset>
+
+                        <fieldset class="t-group">
+                            <legend>Agent connection</legend>
+                            <div class="selectContainer">
+                                <label class="selectLabel" for="Tls">Encryption <span class="t-when">restart</span></label>
+                                <select is="emby-select" id="Tls" class="emby-select-withcolor emby-select">
+                                    <option value="SelfSigned">TLS with a self-signed certificate; tentacles pin its fingerprint</option>
+                                    <option value="Files">TLS with my certificate files</option>
+                                    <option value="Off">None: the token crosses the network in cleartext</option>
+                                </select>
+                                <div class="fieldDescription">TENTACLE_TLS_CERT and TENTACLE_TLS_KEY in the server's environment override this with certificate files.</div>
+                            </div>
+                            <div id="TTlsFiles">
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="TlsCertificatePath">Certificate file</label>
+                                    <input id="TlsCertificatePath" type="text" is="emby-input" />
+                                    <div class="fieldDescription">PEM with the chain (and the key, if no key file is given), or .pfx. Reloaded when the file changes.</div>
+                                </div>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="TlsKeyPath">Key file</label>
+                                    <input id="TlsKeyPath" type="text" is="emby-input" />
+                                </div>
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="AgentPort">Port tentacles connect to <span class="t-when">restart</span></label>
+                                <input id="AgentPort" type="number" is="emby-input" min="1" max="65535" />
+                            </div>
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="SocketPath">Socket for the local ffmpeg shim <span class="t-when">restart</span></label>
+                                <input id="SocketPath" type="text" is="emby-input" />
+                                <div class="fieldDescription">Only change this together with TENTACLE_SOCKET in the server mod.</div>
+                            </div>
+                        </fieldset>
+
+                        <fieldset class="t-group">
+                            <legend>Token</legend>
+                            <div id="TTokenEnv" class="t-info" hidden>
+                                The token comes from <code>TENTACLE_TOKEN</code> in the server's environment, so it is managed where you deploy Jellyfin, not here.
+                                To rotate it, set the new value as <code>TENTACLE_TOKEN</code> and the old one as <code>TENTACLE_PREVIOUS_TOKEN</code>, restart Jellyfin, give the tentacles the new token, then remove <code>TENTACLE_PREVIOUS_TOKEN</code>.
+                                <span id="TPrevEnv"></span>
+                            </div>
+                            <div id="TTokenHere" hidden>
+                                <p class="t-sub">Tentacles authenticate with this token (<code>TENTACLE_TOKEN</code> or <code>TENTACLE_TOKEN_FILE</code>). Changing it here disconnects tentacles still using the old one.</p>
+                                <div class="inputContainer">
+                                    <label class="inputLabel inputLabelUnfocused" for="Token">Token <span class="t-when">applies now</span></label>
+                                    <input id="Token" type="text" is="emby-input" class="t-mono" autocomplete="off" spellcheck="false" />
+                                </div>
+                                <div class="t-row">
+                                    <div class="inputContainer">
+                                        <label class="inputLabel inputLabelUnfocused" for="RotateHours">Keep the old token for (hours)</label>
+                                        <input id="RotateHours" type="number" is="emby-input" min="0" max="720" value="24" />
+                                    </div>
+                                    <button is="emby-button" type="button" id="TentacleRotate" class="raised emby-button"><span>Replace token</span></button>
+                                </div>
+                                <div class="fieldDescription">Replaces the token now and keeps accepting the old one for the hours above, so you can update each tentacle. Tentacles still on the old token are marked and then disconnected when the time is up.</div>
+                                <p class="t-note" id="TPrevHere"></p>
+                            </div>
+                        </fieldset>
+
+                        <button is="emby-button" type="submit" class="raised button-submit block emby-button" style="max-width:52em"><span>Save settings</span></button>
+                    </form>
+                </section>
+            </div>
+        </div>
+        <script type="text/javascript">
+            (function () {
+                var pluginId = '3a65d525-990c-4f73-89e9-a0d1500a53d2';
+                var page = document.querySelector('#TentacleConfigPage');
+                var timer = null;
+                var status = null;
+                var token = '';
+                var openJob = null;
+                // Check again: node name -> {before: its check time when clicked, at: click time}
+                // until a different check time comes back (no clock comparison across machines).
+                var checking = {};
+
+                var REASONS = {
+                    'least-loaded': 'least busy tentacle',
+                    'least-loaded-local': 'least busy (the server)',
+                    'kind-local': 'always here (short job)',
+                    'loopback-input': 'reads a local stream',
+                    'no-tentacle': 'no tentacle connected',
+                    'no-ready-tentacle': 'no tentacle ready',
+                    'no-hardware-tentacle': 'no tentacle passed the GPU test',
+                    'background-slots-full': 'background slots full',
+                    'all-busy': 'every tentacle full',
+                    'attach-timeout': 'tentacle did not answer',
+                    'protocol-mismatch': 'version mismatch',
+                    'dry-run': 'shadow mode',
+                    'disabled': 'Tentacle off'
+                };
+                var KINDS = { Transcode: 'Playback', Extract: 'Subtitles/fonts', Trickplay: 'Trickplay', Analysis: 'Audio analysis', ImageSingle: 'Image', Probe: 'Probe', Other: 'Other' };
+                var STATES = { Ready: 'ok', Degraded: 'warn', Verifying: 'info', Draining: 'info', CoolingDown: 'warn', Incompatible: 'bad', DetectOnly: 'info' };
+                var STATE_WORDS = { Ready: 'Ready', Degraded: 'Degraded', Verifying: 'Checking', Draining: 'Draining', CoolingDown: 'Benched', Incompatible: 'Incompatible', DetectOnly: 'Detect only' };
+                var CODECS = [['h264', 'H.264'], ['hevc', 'HEVC'], ['hevc10', 'HEVC 10-bit'], ['vp9', 'VP9'], ['av1', 'AV1']];
+                var VENDORS = { intel: 'Intel', amd: 'AMD', nvidia: 'NVIDIA', broadcom: 'Broadcom' };
+
+                function esc(s) {
+                    return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, function (c) {
+                        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+                    });
+                }
+                function q(sel) { return page.querySelector(sel); }
+                function ago(iso) {
+                    var s = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+                    if (s < 60) { return s + ' s ago'; }
+                    if (s < 3600) { return Math.round(s / 60) + ' min ago'; }
+                    if (s < 86400) { return Math.round(s / 3600) + ' h ago'; }
+                    return new Date(iso).toLocaleDateString();
+                }
+                function span(ms) {
+                    var s = ms / 1000;
+                    if (s < 60) { return s.toFixed(s < 10 ? 1 : 0) + ' s'; }
+                    var m = Math.floor(s / 60);
+                    return m < 60 ? m + ' min ' + Math.round(s % 60) + ' s' : Math.floor(m / 60) + ' h ' + (m % 60) + ' min';
+                }
+                function ffmpegShort(line) {
+                    var m = /^ffmpeg version (\S+)/.exec(line || '');
+                    return m ? m[1] : (line || 'unknown');
+                }
+                function reason(r) {
+                    if (!r) { return ''; }
+                    if (r.indexOf('path-ineligible:') === 0) {
+                        return 'path not shared: <code>' + esc(r.substring(16)) + '</code>';
+                    }
+                    return esc(REASONS[r] || r);
+                }
+                function result(j) {
+                    var map = { running: ['info', 'Running'], ok: ['ok', 'Done'], killed: ['', 'Stopped'], exited: ['', 'Ended'], error: ['bad', 'Failed'], lost: ['bad', 'Lost'], failed: ['bad', 'Did not start'], refused: ['bad', 'Refused'] };
+                    var r = map[j.Outcome] || ['', j.Outcome];
+                    var code = j.ExitCode != null && j.ExitCode !== 0 ? ' (exit ' + j.ExitCode + ')' : '';
+                    return '<span class="t-state ' + r[0] + '">' + esc(r[1]) + '</span>' + esc(code);
+                }
+                function what(j) {
+                    return j.Item ? esc(j.Item) : '<span class="t-note">' + esc(KINDS[j.Kind] || j.Kind) + ' job</span>';
+                }
+                function forWhom(j) {
+                    if (j.User) { return esc(j.User) + (j.Client ? '<div class="t-who">' + esc(j.Client) + '</div>' : ''); }
+                    return '<span class="t-note">Jellyfin</span>';
+                }
+                function where(node) {
+                    if (node === 'local') {
+                        return esc(status && status.Server ? status.Server.Name : 'this server') + '<span class="t-role server">server</span>';
+                    }
+                    return node === 'none' ? '<span class="t-note">nowhere</span>' : esc(node);
+                }
+                function get(path) { return ApiClient.getJSON(ApiClient.getUrl('Tentacle/' + path)); }
+
+                function renderSummary(s, nodes, jobs) {
+                    var ready = nodes.filter(function (n) { return n.State === 'Ready' || n.State === 'Degraded'; }).length;
+                    var probes = nodes.filter(function (n) { return n.DetectOnly; }).length;
+                    var running = jobs.filter(function (j) { return j.Outcome === 'running'; });
+                    var remote = running.filter(function (j) { return j.Node !== 'local'; }).length;
+                    var placement = { Active: ['ok', 'Active'], DryRun: ['info', 'Shadow'], Disabled: ['', 'Off'] }[s.Placement] || ['', s.Placement];
+                    var broker = s.StartError ? ['bad', 'Not running'] : ['ok', s.Tls ? 'Listening, encrypted' : 'Listening, not encrypted'];
+                    q('#TSummary').innerHTML =
+                        '<div><span class="t-k">Where jobs run</span><span class="t-state ' + placement[0] + '">' + placement[1] + '</span></div>'
+                        + '<div><span class="t-k">Broker</span><span class="t-state ' + broker[0] + '">' + broker[1] + '</span></div>'
+                        + '<div><span class="t-k">Tentacles usable</span><span class="t-state ' + (ready > 0 ? 'ok' : 'bad') + '">' + ready + ' of ' + (nodes.length - probes) + '</span>' + (probes ? ' <span class="t-note">(and ' + probes + ' detect only)</span>' : '') + '</div>'
+                        + '<div><span class="t-k">Jobs running</span>' + running.length + (running.length ? ' <span class="t-note">(' + remote + ' on tentacles, ' + (running.length - remote) + ' on ' + esc(s.Server.Name) + ')</span>' : '') + '</div>';
+                    q('#TAlert').innerHTML = s.StartError
+                        ? '<div class="t-alert"><strong>The broker is not running</strong>, so every job runs on this server. ' + esc(s.StartError) + '</div>'
+                        : '';
+                }
+
+                function renderRunning(jobs) {
+                    var running = jobs.filter(function (j) { return j.Outcome === 'running'; });
+                    q('#TPlayingSection').hidden = running.length === 0;
+                    q('#TRunning').innerHTML = running.map(function (j) {
+                        return '<tr><td class="t-lead">' + what(j) + '</td><td data-l="For">' + forWhom(j) + '</td><td data-l="Kind">' + esc(KINDS[j.Kind] || j.Kind) + '</td><td data-l="Runs on">'
+                            + where(j.Node) + (j.Nice ? ' <span class="t-note">(nice ' + j.Nice + ')</span>' : '')
+                            + '</td><td class="t-num" data-l="For how long">' + span(Date.now() - new Date(j.StartedAt).getTime()) + '</td></tr>';
+                    }).join('');
+                }
+
+                // A node with weight 2 takes twice the load of one with weight 1 before losing jobs to it.
+                function weight(w, source) {
+                    var v = Math.round(w * 100) / 100;
+                    return esc(v) + ' <span class="t-note">(' + source + (v === 1 ? '' : ': takes ' + esc(v) + '× the load of a weight-1 node') + ')</span>';
+                }
+
+                function meter(label, used, max) {
+                    var pct = max > 0 ? Math.min(100, Math.round(used / max * 100)) : 0;
+                    return '<div class="t-meter"><div class="t-label"><span>' + label + '</span><span>' + used + ' of ' + max + '</span></div>'
+                        + '<div class="t-bar" role="img" aria-label="' + label + ': ' + used + ' of ' + max + '"><i style="width:' + pct + '%"></i></div></div>';
+                }
+
+                function gpuName(g) {
+                    var vendor = VENDORS[g.Vendor] || g.Vendor;
+                    var name = g.Model && g.Model.toLowerCase().indexOf(g.Vendor) === 0 ? g.Model : vendor + (g.Model ? ' ' + g.Model : '');
+                    var bits = [g.Api !== 'none' ? g.Api.toUpperCase() : 'no video API', g.Device.replace('/dev/dri/', ''), g.Driver, g.PciId].filter(function (b) { return b; });
+                    return esc(name) + ' <span class="t-note">(' + esc(bits.join(', ')) + ')</span>';
+                }
+                function caps(g, dir) {
+                    var probed = CODECS.filter(function (c) { return dir === 'decode' || c[0] !== 'vp9'; });
+                    var yes = probed.filter(function (c) { return g.Capabilities.indexOf(dir + ':' + c[0]) >= 0; });
+                    var no = probed.filter(function (c) { return yes.indexOf(c) < 0; });
+                    return (yes.length ? esc(yes.map(function (c) { return c[1]; }).join(', ')) : 'nothing')
+                        + (yes.length && no.length ? ' <span class="t-note">(not ' + esc(no.map(function (c) { return c[1]; }).join(', ')) + ')</span>' : '');
+                }
+                function hardwareFacts(n) {
+                    if (!n.Arch) {
+                        // An agent before 0.7: it only lists its devices.
+                        return '<dt>GPU</dt><dd>' + (n.Devices.length ? esc(n.Devices.join(', ')) + (n.HardwareOk ? ', self-test passed' : '') : 'none') + '</dd>';
+                    }
+                    var host = esc(n.Host !== n.Name ? n.Host + ', ' : '') + esc(n.Arch) + ', ' + esc(n.CpuModel || n.Cores + ' CPUs') + ' <span class="t-note">(' + n.Cores + ' CPUs, kernel ' + esc(n.Kernel) + ')</span>';
+                    var g = n.Gpu;
+                    if (!g) {
+                        return '<dt>Machine</dt><dd>' + host + '</dd><dt>GPU</dt><dd>None: runs only jobs that use no hardware</dd>';
+                    }
+                    return '<dt>Machine</dt><dd>' + host + '</dd>' + gpuRows(g, n.HardwareOk ? ', runs this server\'s hardware jobs' : '');
+                }
+                function gpuRows(g, note) {
+                    var rows = '<dt>GPU</dt><dd>' + gpuName(g) + note + '</dd>';
+                    if (g.Api !== 'none' && g.Capabilities.length) {
+                        rows += '<dt>Encodes</dt><dd>' + caps(g, 'encode') + '</dd><dt>Decodes</dt><dd>' + caps(g, 'decode') + '</dd>';
+                    }
+                    return rows + (g.Detail ? '<dt>Probe</dt><dd class="t-note">' + esc(g.Detail) + '</dd>' : '');
+                }
+                function serverGpu(m) {
+                    var used = m.Hardware ? ', used by Jellyfin (' + esc(m.Hardware.toUpperCase()) + ')' : ' <span class="t-note">(Jellyfin encodes in software)</span>';
+                    if (!m.GpuProbed) {
+                        return '<dt>GPU</dt><dd>' + (m.Hardware ? esc(m.Hardware.toUpperCase()) : 'Software') + ' <span class="t-note">(measuring what it can do…)</span></dd>';
+                    }
+                    return m.Gpu ? gpuRows(m.Gpu, used) : '<dt>GPU</dt><dd>None found' + (m.Hardware ? ', though Jellyfin is set to ' + esc(m.Hardware.toUpperCase()) : '') + '</dd>';
+                }
+
+                function serverCard(s) {
+                    var m = s.Server;
+                    // The same words as a tentacle's state: Ready when it takes jobs, like "Detect only" when it only stands by.
+                    var role = s.LocalSlots > 0 ? ['ok', 'Ready'] : s.LocalFallback ? ['info', 'Backup only'] : ['', 'No transcoding'];
+                    var runs = s.LocalSlots > 0 ? 'Takes jobs like a tentacle, competing with them by load; on a tie, whichever node waited longest gets the job.'
+                        : s.LocalFallback ? 'Runs only what no tentacle can take: all of them busy or down, or a directory they do not share.'
+                        : 'Never runs a job a tentacle could: it waits up to 10 s for one, then fails. Jobs only it can run (probes, images, unshared directories, local streams) still run here.';
+                    var load = s.LocalSlots > 0 ? meter('Job slots in use', s.LocalLoad, s.LocalSlots) + meter('Background slots in use', s.LocalBackgroundLoad, s.LocalBackgroundSlots)
+                        : s.LocalLoad > 0 ? '<p class="t-note">Running ' + s.LocalLoad + ' slots of jobs no tentacle took.</p>' : '';
+                    return '<article class="t-node server">'
+                        + '<header><span class="t-name">' + esc(m.Name) + '<span class="t-role server">Jellyfin server</span></span><span class="t-state ' + role[0] + '">' + role[1] + '</span></header>'
+                        + '<p class="t-note">' + runs + ' <button type="button" class="t-linkbtn tentacle-role">Change</button></p>'
+                        + load
+                        + '<dl class="t-facts">'
+                        + (s.LocalSlots > 0 ? '<dt>Weight</dt><dd>' + weight(s.LocalWeight, 'set below') + '</dd>' : '')
+                        + '<dt>ffmpeg</dt><dd>' + esc(ffmpegShort(s.ServerFfmpegVersion)) + '</dd>'
+                        + '<dt>Machine</dt><dd>' + esc(m.Arch) + ', ' + esc(m.CpuModel) + ' <span class="t-note">(' + m.Cores + ' CPUs, kernel ' + esc(m.Kernel) + ')</span></dd>'
+                        + serverGpu(m)
+                        + '<dt>Agent</dt><dd>' + esc(s.Version) + '</dd>'
+                        + '<dt>Jobs confined</dt><dd><span class="t-note">Not needed: Jellyfin\'s own ffmpeg, as without Tentacle</span></dd>'
+                        + '</dl></article>';
+                }
+
+                function renderNodes(nodes) {
+                    var server = status && status.Server ? serverCard(status) : '';
+                    if (nodes.length === 0) {
+                        q('#TNodes').innerHTML = server + '<div class="t-empty">No tentacle is connected, so every job runs on ' + esc(status && status.Server ? status.Server.Name : 'this server') + '. Open "Connect a tentacle" below to add one.</div>';
+                        q('#TConnect').open = true;
+                        return;
+                    }
+
+                    var open = {};
+                    page.querySelectorAll('#TNodes details[data-node]').forEach(function (d) { open[d.dataset.node] = d.open; });
+                    q('#TNodes').innerHTML = server + nodes.map(function (n) {
+                        var state = '<span class="t-state ' + (STATES[n.State] || '') + '">' + esc(STATE_WORDS[n.State] || n.State) + '</span>'
+                            + (n.CooldownUntil ? ' <span class="t-note">until ' + new Date(n.CooldownUntil).toLocaleTimeString() + '</span>' : '');
+                        var roots = n.Checks.filter(function (c) { return c.Name.indexOf('root:') === 0; });
+                        var shared = roots.filter(function (c) { return c.Ok; }).length;
+                        var failedRequired = n.Checks.filter(function (c) { return !c.Ok && c.Required; });
+                        var summary = n.Checks.length === 0 ? 'Checks pending'
+                            : failedRequired.length ? '<span class="t-state bad">' + failedRequired.length + ' required check' + (failedRequired.length > 1 ? 's' : '') + ' failed</span>'
+                            : shared + ' of ' + roots.length + ' directories shared, all required checks passed';
+                        var checks = n.Checks.map(function (c) {
+                            var label = c.Name.indexOf('root:') === 0 ? '<code>' + esc(c.Name.substring(5)) + '</code>'
+                                : c.Name === 'ffmpeg' ? 'Same ffmpeg as this server'
+                                : c.Name === 'uid' ? 'Writes files as the same user'
+                                : c.Name.indexOf('hardware:') === 0 ? 'GPU self-test (' + esc(c.Name.substring(9)) + ')' : esc(c.Name);
+                            var mark = c.Ok ? '<span aria-label="passed">✓</span>' : '<span aria-label="failed" style="color:var(--t-' + (c.Required ? 'bad' : 'warn') + ')">✗</span>';
+                            var why = c.Ok ? '' : '<span class="t-why">' + esc(c.Detail) + (c.Required ? '' : '. Optional: only jobs that need it stay on this server.') + '</span>';
+                            return '<li>' + mark + '<span>' + label + '</span>' + why + '</li>';
+                        }).join('');
+                        return '<article class="t-node">'
+                            + '<header><span class="t-name">' + esc(n.Name) + '<span class="t-role">tentacle</span></span>' + state + '</header>'
+                            + (n.DetectOnly
+                                ? '<p class="t-note">Reports what it found and never takes a job (started with <code>TENTACLE_MAX_JOBS=0</code>).</p>'
+                                : meter('Job slots in use', n.Load, n.MaxJobs) + meter('Background slots in use', n.BackgroundLoad, n.MaxBackgroundJobs))
+                            + '<dl class="t-facts">'
+                            + (n.DetectOnly ? '' : '<dt>Weight</dt><dd>' + weight(n.Weight, '<code>TENTACLE_WEIGHT</code>') + '</dd>')
+                            + '<dt>ffmpeg</dt><dd>' + esc(ffmpegShort(n.FfmpegVersion)) + '</dd>'
+                            + hardwareFacts(n)
+                            + '<dt>Agent</dt><dd>' + esc(n.AgentVersion) + (n.Arch ? '' : ', ' + n.Cores + ' CPUs') + (n.UsesPreviousToken ? ', <span class="t-state warn">still on the previous token</span>' : '') + '</dd>'
+                            + (n.DetectOnly ? '' : '<dt>Jobs confined</dt><dd>' + (n.Sandbox ? confined(n.Sandbox) : '<span class="t-state warn">no</span> <span class="t-note">(set <code>TENTACLE_ROOTS</code> on the tentacle)</span>') + '</dd>')
+                            + '<dt>Last heard from</dt><dd>' + ago(n.LastSeen) + '</dd>'
+                            + '</dl>'
+                            + '<details data-node="' + esc(n.Name) + '"' + (open[n.Name] || failedRequired.length ? ' open' : '') + '><summary>' + summary + '</summary><ul class="t-checks">' + checks + '</ul></details>'
+                            + '<footer><span class="t-note" aria-live="polite">' + checkStatus(n) + '</span>'
+                            + '<button is="emby-button" type="button" class="raised emby-button tentacle-verify" data-node="' + esc(n.Name) + '" data-verified="' + esc(n.VerifiedAt || '') + '"' + (checking[n.Name] ? ' disabled' : '') + '><span>'
+                            + (checking[n.Name] ? 'Checking…' : 'Check again') + '</span></button></footer>'
+                            + '</article>';
+                    }).join('');
+                }
+
+                // "Landlock ABI 6, roots /a, /b" -> "Yes, to 2 directories", the list on hover.
+                function confined(sandbox) {
+                    var at = sandbox.indexOf(', roots ');
+                    var roots = at < 0 ? [] : sandbox.substring(at + 8).split(', ');
+                    return '<span title="' + esc(sandbox) + '">Yes, to ' + roots.length + ' director' + (roots.length === 1 ? 'y' : 'ies') + '</span> <span class="t-note">(' + esc(at < 0 ? sandbox : sandbox.substring(0, at)) + ')</span>';
+                }
+
+                function checkStatus(n) {
+                    var asked = checking[n.Name];
+                    if (asked && (n.VerifiedAt || '') !== asked.before) {
+                        delete checking[n.Name];
+                        return 'Checked just now';
+                    }
+
+                    if (asked && Date.now() - asked.at > 60000) {
+                        delete checking[n.Name];
+                        return '<span class="t-state bad">No answer to the check in a minute</span>';
+                    }
+
+                    return n.VerifiedAt ? 'Checked ' + ago(n.VerifiedAt) : 'Not checked yet';
+                }
+
+                function renderJobs(jobs) {
+                    var shadow = status && status.Placement === 'DryRun';
+                    if (jobs.length === 0) {
+                        q('#TJobs').innerHTML = '<tr><td colspan="7" class="t-note">No jobs yet. They appear here as soon as Jellyfin starts ffmpeg (play something that needs transcoding).</td></tr>';
+                        return;
+                    }
+
+                    q('#TJobs').innerHTML = jobs.map(function (j) {
+                        var ranOn = where(j.Node);
+                        if (shadow && j.WouldRunOn) { ranOn += '<div class="t-who">would run on ' + esc(j.WouldRunOn) + '</div>'; }
+                        var row = '<tr class="t-job" tabindex="0" data-job="' + esc(j.Id) + '" aria-expanded="' + (openJob === j.Id) + '">'
+                            + '<td style="white-space:nowrap" data-l="Started">' + ago(j.StartedAt) + '</td>'
+                            + '<td class="t-lead">' + what(j) + (j.User ? '<div class="t-who">' + esc(j.User) + (j.Client ? ', ' + esc(j.Client) : '') + '</div>' : '') + '</td>'
+                            + '<td data-l="Kind">' + esc(KINDS[j.Kind] || j.Kind) + '</td><td data-l="Ran on">' + ranOn + '</td><td data-l="Why there">' + reason(j.Reason) + '</td>'
+                            + '<td data-l="Result">' + result(j) + '</td><td class="t-num" data-l="Took">' + (j.DurationMs != null ? span(j.DurationMs) : '') + '</td></tr>';
+                        if (openJob === j.Id) {
+                            row += '<tr class="t-detail"><td colspan="7"><dl class="t-facts">'
+                                + '<dt>Job</dt><dd>' + esc(j.Id) + (j.PlaySessionId ? ', play session ' + esc(j.PlaySessionId) : '') + (j.Nice ? ', nice ' + j.Nice : '') + '</dd>'
+                                + (j.WouldRunOn ? '<dt>Would run on</dt><dd>' + esc(j.WouldRunOn) + '</dd>' : '')
+                                + '<dt>Command</dt><dd><code>' + esc(j.Command) + '</code></dd></dl></td></tr>';
+                        }
+
+                        return row;
+                    }).join('');
+                }
+
+                function renderServer(s) {
+                    var expiry = s.TlsNotAfter ? new Date(s.TlsNotAfter).toLocaleDateString() : '';
+                    var tls = s.Tls
+                        ? (s.TlsSelfSigned ? 'Encrypted, self-signed certificate (valid until ' + expiry + ')' : 'Encrypted, certificate from files (valid until ' + expiry + ')')
+                            + '<div style="margin-top:.3em"><code id="TFingerprint">' + esc(s.TlsFingerprint) + '</code> <button type="button" class="t-linkbtn" id="TCopyFp">Copy fingerprint</button></div>'
+                        : '<span class="t-state bad">Not encrypted</span> <span class="t-note">the token crosses the network in cleartext</span>';
+                    q('#TServer').innerHTML =
+                        '<dt>Tentacle</dt><dd>' + esc(s.Version) + ' on ' + esc(s.Server.Name) + '</dd>'
+                        + '<dt>Tentacles connect to</dt><dd>port ' + esc(s.AgentPort) + '</dd>'
+                        + '<dt>Connection</dt><dd>' + tls + '</dd>'
+                        + '<dt>Token</dt><dd>' + (s.TokenFromEnvironment ? 'from <code>TENTACLE_TOKEN</code>' : 'stored in this plugin\'s settings') + '</dd>'
+                        + '<dt>Metrics</dt><dd>' + (s.MetricsEnabled
+                            ? '<code>tentacle_*</code> in Jellyfin\'s <a href="' + esc(ApiClient.getUrl('metrics')) + '" target="_blank" rel="noopener">/metrics</a>'
+                            : 'off: set <code>EnableMetrics</code> to true in system.xml and restart') + '</dd>';
+                    q('#TRoots').innerHTML = s.SharedRoots.map(function (r) {
+                        var role = r.Required ? 'ffmpeg writes here; required'
+                            : r.Writable ? 'ffmpeg writes here for some jobs'
+                            : 'ffmpeg reads media here';
+                        return '<li>' + esc(r.Path) + ' <span class="t-note">' + role + '</span></li>';
+                    }).join('');
+                    q('#TModVersion').textContent = s.Version;
+                    q('#TTokenEnv').hidden = !s.TokenFromEnvironment;
+                    q('#TTokenHere').hidden = s.TokenFromEnvironment;
+                    var prev = '';
+                    if (s.PreviousTokenExpires) {
+                        var until = new Date(s.PreviousTokenExpires);
+                        prev = until.getFullYear() > 9000 ? 'The previous token (TENTACLE_PREVIOUS_TOKEN) is still accepted.'
+                            : until > new Date() ? 'The previous token is accepted until ' + until.toLocaleString() + '.' : '';
+                    }
+                    q('#TPrevEnv').textContent = s.TokenFromEnvironment ? prev : '';
+                    q('#TPrevHere').textContent = s.TokenFromEnvironment ? '' : prev;
+                    showEnv();
+                }
+
+                function showEnv() {
+                    if (!status) { return; }
+                    q('#TEnv').textContent = 'TENTACLE_BROKER_URL=' + (status.Tls ? 'wss' : 'ws') + '://' + window.location.hostname + ':' + status.AgentPort + '\n'
+                        + (status.Tls && status.TlsSelfSigned ? 'TENTACLE_BROKER_FINGERPRINT=' + status.TlsFingerprint + '\n' : '')
+                        + (status.Tls && !status.TlsSelfSigned ? 'TENTACLE_CA_FILE=/path/to/ca.crt\n' : '')
+                        + (status.Tls ? '' : 'TENTACLE_ALLOW_PLAIN_WS=true\n')
+                        + 'TENTACLE_TOKEN=' + (status.TokenFromEnvironment ? '<the value of the server\'s TENTACLE_TOKEN>' : (token || '<token>')) + '\n'
+                        + 'TENTACLE_NODE_NAME=<a unique name>\n'
+                        + 'TENTACLE_MAX_JOBS=4';
+                }
+
+                function refresh() {
+                    return Promise.all([get('Status'), get('Nodes'), get('Jobs?limit=50')]).then(function (r) {
+                        status = r[0];
+                        renderSummary(r[0], r[1], r[2]);
+                        renderRunning(r[2]);
+                        renderNodes(r[1]);
+                        renderJobs(r[2]);
+                        renderServer(r[0]);
+                    });
+                }
+
+                function showTlsFields() {
+                    q('#TTlsFiles').hidden = q('#Tls').value !== 'Files';
+                }
+
+                function showLocalRole() {
+                    var role = q('#LocalRole').value;
+                    q('#TLocalWorker').hidden = role !== 'compete';
+                    q('#TLocalRoleHelp').textContent = {
+                        backup: 'This server runs a job only when no tentacle can take it: all of them busy or down, or a directory they do not share.',
+                        compete: 'This server competes with the tentacles for every job, as one more node: a job goes to the least busy, and on a tie to whichever waited longest.',
+                        never: 'A job a tentacle could run waits up to 10 seconds for one and then fails: playback shows an error while every tentacle is busy or down. Jobs only this server can run (probes, images, directories no tentacle shares, local streams) still run here.'
+                    }[role];
+                }
+
+                function copy(text, button) {
+                    navigator.clipboard.writeText(text).then(function () {
+                        var label = button.querySelector('span') || button;
+                        var before = label.textContent;
+                        label.textContent = 'Copied';
+                        setTimeout(function () { label.textContent = before; }, 1500);
+                    });
+                }
+
+                page.addEventListener('pageshow', function () {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        q('#Placement').value = config.Placement;
+                        q('#Token').value = config.Token || '';
+                        q('#AgentPort').value = config.AgentPort;
+                        q('#SocketPath').value = config.SocketPath;
+                        q('#ExtraRoots').value = (config.ExtraRoots || []).join('\n');
+                        q('#StrictFfmpegVersion').checked = config.StrictFfmpegVersion;
+                        q('#MetricsNameViewers').checked = !!config.MetricsNameViewers;
+                        q('#BackgroundNice').value = config.BackgroundNice;
+                        q('#LocalRole').value = config.LocalSlots > 0 ? 'compete' : config.LocalFallback === false ? 'never' : 'backup';
+                        q('#LocalSlots').value = config.LocalSlots || 4;
+                        q('#LocalWeight').value = config.LocalWeight || 1;
+                        q('#Tls').value = config.Tls;
+                        q('#TlsCertificatePath').value = config.TlsCertificatePath || '';
+                        q('#TlsKeyPath').value = config.TlsKeyPath || '';
+                        token = config.Token;
+                        showTlsFields();
+                        showLocalRole();
+                        return refresh();
+                    }).then(Dashboard.hideLoadingMsg, Dashboard.hideLoadingMsg);
+                    timer = setInterval(refresh, 5000);
+                });
+
+                page.addEventListener('pagehide', function () {
+                    clearInterval(timer);
+                });
+
+                q('#Tls').addEventListener('change', showTlsFields);
+                q('#LocalRole').addEventListener('change', showLocalRole);
+
+                q('#TNodes').addEventListener('click', function (e) {
+                    if (e.target.closest('.tentacle-role')) {
+                        q('#LocalRole').scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        q('#LocalRole').focus();
+                        return;
+                    }
+
+                    var button = e.target.closest('.tentacle-verify');
+                    if (button) {
+                        var node = button.dataset.node;
+                        checking[node] = { before: button.dataset.verified || '', at: Date.now() };
+                        button.disabled = true;
+                        button.querySelector('span').textContent = 'Checking…';
+                        ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl('Tentacle/Nodes/' + encodeURIComponent(node) + '/Verify') })
+                            .then(function () {
+                                // The tentacle re-checks at its next heartbeat (a few seconds).
+                                [2000, 4000, 7000, 12000].forEach(function (ms) { setTimeout(refresh, ms); });
+                            }, function () {
+                                delete checking[node];
+                                refresh();
+                            });
+                    }
+                });
+
+                function toggleJob(row) {
+                    openJob = openJob === row.dataset.job ? null : row.dataset.job;
+                    refresh();
+                }
+
+                q('#TJobs').addEventListener('click', function (e) {
+                    var row = e.target.closest('tr.t-job');
+                    if (row) { toggleJob(row); }
+                });
+                q('#TJobs').addEventListener('keydown', function (e) {
+                    var row = e.target.closest('tr.t-job');
+                    if (row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleJob(row); }
+                });
+
+                page.addEventListener('click', function (e) {
+                    if (e.target.id === 'TCopyFp') { copy(status.TlsFingerprint, e.target); }
+                });
+                q('#TCopyEnv').addEventListener('click', function (e) { copy(q('#TEnv').textContent, e.currentTarget); });
+
+                q('#TentacleRotate').addEventListener('click', function () {
+                    var hours = Math.max(0, parseFloat(q('#RotateHours').value) || 0);
+                    if (!window.confirm('Replace the token? The current one keeps working for ' + hours + ' hours.')) {
+                        return;
+                    }
+
+                    ApiClient.ajax({ type: 'POST', url: ApiClient.getUrl('Tentacle/Token/Rotate', { overlapMinutes: hours * 60 }), dataType: 'json' })
+                        .then(function (r) {
+                            token = r.Token;
+                            q('#Token').value = r.Token;
+                            refresh();
+                        });
+                });
+
+                q('#TentacleConfigForm').addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        config.Placement = q('#Placement').value;
+                        if (!status || !status.TokenFromEnvironment) {
+                            config.Token = q('#Token').value.trim() || config.Token;
+                        }
+                        config.AgentPort = parseInt(q('#AgentPort').value, 10) || config.AgentPort;
+                        config.SocketPath = q('#SocketPath').value.trim() || config.SocketPath;
+                        config.StrictFfmpegVersion = q('#StrictFfmpegVersion').checked;
+                        config.MetricsNameViewers = q('#MetricsNameViewers').checked;
+                        config.BackgroundNice = Math.min(19, Math.max(0, parseInt(q('#BackgroundNice').value, 10) || 0));
+                        var role = q('#LocalRole').value;
+                        config.LocalSlots = role === 'compete' ? Math.min(64, Math.max(1, parseInt(q('#LocalSlots').value, 10) || 4)) : 0;
+                        config.LocalFallback = role !== 'never';
+                        config.LocalWeight = Math.min(16, Math.max(0.1, parseFloat(q('#LocalWeight').value) || 1));
+                        config.Tls = q('#Tls').value;
+                        config.TlsCertificatePath = q('#TlsCertificatePath').value.trim();
+                        config.TlsKeyPath = q('#TlsKeyPath').value.trim();
+                        config.ExtraRoots = q('#ExtraRoots').value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+                        return ApiClient.updatePluginConfiguration(pluginId, config);
+                    }).then(function (result) {
+                        Dashboard.processPluginConfigurationUpdateResult(result);
+                        refresh();
+                    });
+                    return false;
+                });
+            })();
+        </script>
+    </div>
+</body>
+</html>

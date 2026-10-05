@@ -1,0 +1,42 @@
+# A tentacle: the same Jellyfin image (and so the same ffmpeg) with the worker
+# mod, which runs the Tentacle agent instead of Jellyfin. Run one per machine.
+#
+# The shared directories must be mounted at exactly the paths the server uses.
+# The dashboard shows, for each tentacle, which ones it proved it shares.
+services:
+  tentacle:
+    image: linuxserver/jellyfin:version-12.1ubu2604   # the same tag as the server
+    container_name: tentacle
+    hostname: worker1
+    environment:
+      PUID: "1000"   # the same uid as the server: files it writes must be the server's
+      PGID: "1000"
+      TZ: Etc/UTC
+      DOCKER_MODS: crisidev/tentacle:worker-1.0.0
+      TENTACLE_BROKER_URL: wss://jellyfin.lan:8097
+      # From Dashboard → Tentacle on the server:
+      TENTACLE_BROKER_FINGERPRINT: "AB:CD:...:EF"
+      TENTACLE_TOKEN_FILE: /run/secrets/tentacle-token
+      TENTACLE_NODE_NAME: worker1
+      # Jobs can only touch these directories (Landlock). Strongly recommended.
+      TENTACLE_ROOTS: /data/media:/config/cache/transcodes:/config/cache/temp:/config/cache/concat:/config/data/data/subtitles:/config/data/data/attachments
+      TENTACLE_MAX_JOBS: "4"
+      # SIGTERM drains: no new jobs, running ones get this long to finish.
+      TENTACLE_DRAIN_SECONDS: "20"
+      S6_SERVICES_GRACETIME: "25000"
+    stop_grace_period: 35s
+    volumes:
+      - /mnt/shared/jellyfin/transcodes:/config/cache/transcodes
+      - /mnt/shared/jellyfin/temp:/config/cache/temp
+      - /mnt/shared/jellyfin/concat:/config/cache/concat
+      - /mnt/shared/jellyfin/subtitles:/config/data/data/subtitles
+      - /mnt/shared/jellyfin/attachments:/config/data/data/attachments
+      - /mnt/shared/media:/data/media:ro
+      - ./tentacle-token:/run/secrets/tentacle-token:ro
+    devices:
+      - /dev/dri:/dev/dri   # optional: the GPU this tentacle offers
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/tentacle/tentacle", "agent-status"]
+      interval: 10s
+      start_period: 30s
+    restart: unless-stopped

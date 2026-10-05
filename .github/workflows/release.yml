@@ -1,0 +1,82 @@
+name: release
+
+# vX.Y.Z tags: build, run the unit and alert-rule tests (the end-to-end suites
+# and the soak already ran on main for that commit, so tag main only after its
+# ci run is green), push crisidev/tentacle:{server,worker}-X.Y.Z to Docker Hub
+# (public: LinuxServer's mod loader pulls anonymously) and create the GitHub
+# release with the plugin zip, the binaries, the alert rules, the Grafana board,
+# SHA256SUMS and the image references pinned by digest.
+# Needs the DOCKERHUB_USERNAME and DOCKERHUB_TOKEN secrets (a Docker Hub access
+# token with Read & Write only).
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+env:
+  IMAGE: docker.io/crisidev/tentacle
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: NativeAOT toolchain (amd64 and arm64)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq clang zlib1g-dev zip jq gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross
+
+      - name: Version
+        id: version
+        run: |
+          version="${GITHUB_REF#refs/tags/v}"
+          base="$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props)"
+          # A tag that disagrees with Directory.Build.props is a mistake.
+          [[ "${version%%-*}" == "${base}" ]] || { echo "tag v${version} but Directory.Build.props says ${base}" >&2; exit 1; }
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Alert rules (promtool test rules)
+        run: scripts/build.sh rules
+
+      - name: Test, plugin, AOT binary, mod images
+        env:
+          TENTACLE_VERSION: ${{ steps.version.outputs.version }}
+          TENTACLE_AOT_LOCAL: '1'
+        run: scripts/build.sh test plugin cli mod
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Push mod images
+        run: |
+          v="${{ steps.version.outputs.version }}"
+          : > dist/digests.txt
+          for role in server worker; do
+            docker buildx build -q --provenance=false --platform linux/amd64,linux/arm64 -f mod/Dockerfile --target "${role}" \
+              -t "${IMAGE}:${role}-${v}" --metadata-file "dist/meta-${role}.json" --push dist/mod
+            # What to put in DOCKER_MODS: tag plus digest (a tag can be overwritten,
+            # a digest cannot). The release notes list these.
+            digest="$(jq -r '."containerimage.digest"' "dist/meta-${role}.json")"
+            echo "${role} crisidev/tentacle:${role}-${v}@${digest}" | tee -a dist/digests.txt
+          done
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          DIGESTS_FILE: dist/digests.txt
+        run: scripts/release.sh "${{ steps.version.outputs.version }}"

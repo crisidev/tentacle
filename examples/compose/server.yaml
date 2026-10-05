@@ -1,0 +1,42 @@
+# Jellyfin with the Tentacle server mod.
+#
+# Every directory ffmpeg reads or writes must be visible at the same path on the
+# server and on every tentacle: here /data/media (the libraries) and the shared
+# parts of /config. Put them on shared storage (NFS, CephFS, SMB...) and mount
+# them at the same place on the workers (see worker.yaml).
+#
+# After the first start: Dashboard → Tentacle shows the agent token and the
+# certificate fingerprint the workers need, and an env snippet to copy.
+services:
+  jellyfin:
+    image: linuxserver/jellyfin:version-12.1ubu2604
+    container_name: jellyfin
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: Etc/UTC
+      # The server mod: points Jellyfin at the shim and installs the plugin.
+      DOCKER_MODS: crisidev/tentacle:server-1.0.0
+      # Jellyfin writes trickplay and extracted images under $TMPDIR/jellyfin:
+      # it must be shared too, and /tmp is not.
+      TMPDIR: /config/cache/temp
+      # Optional: the token the agents use. Without it the plugin generates one
+      # and shows it on the dashboard page.
+      # TENTACLE_TOKEN: change-me-to-a-long-random-string
+      # Optional: how this server is named on the dashboard (default: hostname).
+      # TENTACLE_NODE_NAME: jellyfin
+    ports:
+      - 8096:8096   # Jellyfin
+      - 8097:8097   # Tentacle: agents connect here (wss). Only expose it to the workers.
+    volumes:
+      - ./config:/config
+      # Shared with the workers, same paths:
+      - /mnt/shared/jellyfin/transcodes:/config/cache/transcodes
+      - /mnt/shared/jellyfin/temp:/config/cache/temp
+      - /mnt/shared/jellyfin/concat:/config/cache/concat
+      - /mnt/shared/jellyfin/subtitles:/config/data/data/subtitles
+      - /mnt/shared/jellyfin/attachments:/config/data/data/attachments
+      - /mnt/shared/media:/data/media
+    devices:
+      - /dev/dri:/dev/dri   # optional: Intel/AMD hardware acceleration
+    restart: unless-stopped

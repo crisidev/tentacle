@@ -1,0 +1,33 @@
+<Project>
+  <!--
+    One version for every artifact: the plugin, the tentacle binary and the mod
+    images always ship together, so the shim, agent and broker speak the same
+    protocol. CI overrides it with -p:Version=x.y.z.
+  -->
+  <PropertyGroup>
+    <Version>1.0.0</Version>
+    <AssemblyVersion>$(Version).0</AssemblyVersion>
+    <FileVersion>$(Version).0</FileVersion>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisMode>AllEnabledByDefault</AnalysisMode>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <Authors>Matteo Bigoi</Authors>
+    <Copyright>Copyright © Matteo Bigoi and Tentacle contributors</Copyright>
+    <Product>Tentacle</Product>
+    <PackageProjectUrl>https://github.com/crisidev/tentacle</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/crisidev/tentacle</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <!-- The artifacts are public: embed /_/ instead of the build machine's checkout path. -->
+    <PathMap>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)'))=/_/</PathMap>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(IsTestProject)' != 'true'">
+    <PackageReference Include="StyleCop.Analyzers" PrivateAssets="All" />
+    <AdditionalFiles Include="$(MSBuildThisFileDirectory)stylecop.json" Link="stylecop.json" />
+  </ItemGroup>
+</Project>

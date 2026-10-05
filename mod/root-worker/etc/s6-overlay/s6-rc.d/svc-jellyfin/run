@@ -1,0 +1,10 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+# Worker role: this container never runs Jellyfin. svc-jellyfin is taken over by
+# the tentacle agent; mods can overwrite files but not delete them, so the
+# service keeps its name. notification-fd is 3: the agent writes the readiness
+# newline there itself (the original run used s6-notifyoncheck + /health).
+
+export HOME="/config" TENTACLE_NOTIFY_FD=3
+
+exec s6-setuidgid abc /usr/local/bin/tentacle/tentacle agent

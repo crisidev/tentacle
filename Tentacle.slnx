@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Tentacle.Protocol/Tentacle.Protocol.csproj" />
+    <Project Path="src/Tentacle.Broker/Tentacle.Broker.csproj" />
+    <Project Path="src/Jellyfin.Plugin.Tentacle/Jellyfin.Plugin.Tentacle.csproj" />
+    <Project Path="src/Tentacle.Cli/Tentacle.Cli.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Tentacle.Protocol.Tests/Tentacle.Protocol.Tests.csproj" />
+    <Project Path="tests/Tentacle.Broker.Tests/Tentacle.Broker.Tests.csproj" />
+    <Project Path="tests/Tentacle.Cli.Tests/Tentacle.Cli.Tests.csproj" />
+  </Folder>
+</Solution>

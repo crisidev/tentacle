@@ -1,0 +1,20 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+# Tentacle mod init (both roles). Runs after init-mods, before package installs.
+
+echo "**** tentacle: $(/usr/local/bin/tentacle/tentacle version) ****"
+
+# The multi-call binary: ffmpeg/ffprobe symlinks make it the shim. Created here
+# rather than shipped, so they survive however the mod layer gets copied.
+ln -sf tentacle /usr/local/bin/tentacle/ffmpeg
+ln -sf tentacle /usr/local/bin/tentacle/ffprobe
+
+# Broker socket (server) and agent status file (worker) live here.
+mkdir -p /run/tentacle
+lsiown abc:abc /run/tentacle
+
+for script in /tentacle/init.d/*.sh; do
+    [[ -f "${script}" ]] || continue
+    # shellcheck disable=SC1090
+    source "${script}"
+done

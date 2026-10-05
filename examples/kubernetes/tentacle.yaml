@@ -1,0 +1,140 @@
+# Tentacle on Kubernetes: the agent token, the broker Service, a NetworkPolicy and
+# the workers as a DaemonSet. Adapt names, labels, node selection and volumes to
+# your cluster; examples/kubernetes/jellyfin-patch.yaml shows the changes to the
+# Jellyfin server itself.
+#
+# Assumes:
+#   - namespace "jellyfin", the server's pods labelled app: jellyfin;
+#   - the shared directories on PVCs that every node can mount (NFS or similar):
+#     "jellyfin-config" holds /config (the shared parts are mounted with subPath),
+#     "jellyfin-media" holds the libraries at /data/media.
+---
+# The token agents authenticate with. The server reads it from the environment,
+# the workers from a mounted file they re-read on every reconnect (so updating
+# the Secret is enough on their side). "previous" is optional: keep the old
+# token there while rotating.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tentacle-token
+  namespace: jellyfin
+type: Opaque
+stringData:
+  token: change-me-to-a-long-random-string   # e.g. openssl rand -hex 32
+---
+# The broker's agent port. Agents pin the certificate fingerprint, so the name
+# they dial does not have to be in the certificate.
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyfin-tentacle
+  namespace: jellyfin
+spec:
+  selector:
+    app: jellyfin
+  ports:
+    - name: tentacle
+      port: 8097
+      targetPort: 8097
+---
+# Whoever holds the token can run ffmpeg on the workers: only let the tentacle
+# pods reach the broker port. Everything else keeps using 8096.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: jellyfin-ingress
+  namespace: jellyfin
+spec:
+  podSelector:
+    matchLabels:
+      app: jellyfin
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - port: 8096
+    - from:
+        - podSelector:
+            matchLabels:
+              app: jellyfin-tentacle
+      ports:
+        - port: 8097
+---
+# The workers: the same image as the server (so the same ffmpeg) with the worker
+# mod, which runs the agent instead of Jellyfin. /config is an emptyDir; only the
+# directories ffmpeg uses come from shared storage, at the same paths as on the
+# server.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: jellyfin-tentacle
+  namespace: jellyfin
+spec:
+  selector:
+    matchLabels:
+      app: jellyfin-tentacle
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 1   # one at a time: its jobs move to the others
+  template:
+    metadata:
+      labels:
+        app: jellyfin-tentacle
+    spec:
+      nodeSelector:
+        tentacle: "true"   # label the nodes that should transcode
+      # The agent drains for TENTACLE_DRAIN_SECONDS on SIGTERM.
+      terminationGracePeriodSeconds: 35
+      containers:
+        - name: tentacle
+          image: linuxserver/jellyfin:version-12.1ubu2604   # the same tag as the server
+          env:
+            - { name: PUID, value: "1000" }   # the same uid as the server
+            - { name: PGID, value: "1000" }
+            - { name: TZ, value: Etc/UTC }
+            - { name: DOCKER_MODS, value: "crisidev/tentacle:worker-1.0.0" }
+            - name: TENTACLE_BROKER_URL
+              value: wss://jellyfin-tentacle.jellyfin.svc.cluster.local:8097
+            - name: TENTACLE_BROKER_FINGERPRINT   # from Dashboard → Tentacle
+              value: "AB:CD:...:EF"
+            - { name: TENTACLE_TOKEN_FILE, value: /run/secrets/tentacle/token }
+            - name: TENTACLE_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - { name: TENTACLE_MAX_JOBS, value: "4" }
+            - { name: TENTACLE_DRAIN_SECONDS, value: "20" }
+            - { name: S6_SERVICES_GRACETIME, value: "25000" }
+            # Jobs can only touch these directories (Landlock).
+            - name: TENTACLE_ROOTS
+              value: /data/media:/config/cache/transcodes:/config/cache/temp:/config/cache/concat:/config/data/data/subtitles:/config/data/data/attachments
+          readinessProbe:
+            exec:
+              command: ["/usr/local/bin/tentacle/tentacle", "agent-status"]
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            limits:
+              gpu.intel.com/i915: "1"   # or your GPU device plugin's resource; drop for CPU-only
+          volumeMounts:
+            - { name: config, mountPath: /config }
+            - { name: shared, mountPath: /config/cache/transcodes, subPath: cache/transcodes }
+            - { name: shared, mountPath: /config/cache/temp, subPath: cache/temp }
+            - { name: shared, mountPath: /config/cache/concat, subPath: cache/concat }
+            - { name: shared, mountPath: /config/data/data/subtitles, subPath: data/data/subtitles }
+            - { name: shared, mountPath: /config/data/data/attachments, subPath: data/data/attachments }
+            - { name: media, mountPath: /data/media, readOnly: true }
+            - { name: token, mountPath: /run/secrets/tentacle, readOnly: true }
+      volumes:
+        - name: config
+          emptyDir: {}
+        - name: shared
+          persistentVolumeClaim:
+            claimName: jellyfin-config
+        - name: media
+          persistentVolumeClaim:
+            claimName: jellyfin-media
+        - name: token
+          secret:
+            secretName: tentacle-token
+            items:
+              - { key: token, path: token }

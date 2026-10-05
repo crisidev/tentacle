@@ -1,0 +1,208 @@
+# promtool test rules deploy/prometheus/tentacle.rules.test.yaml
+rule_files:
+  - tentacle.rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+  # Healthy tentacle, yet every transcode runs on the server.
+  - interval: 1m
+    input_series:
+      - series: 'tentacle_placements_total{kind="Transcode",node="local",reason="path-ineligible"}'
+        values: '0+1x480'
+      - series: 'tentacle_placements_total{kind="Transcode",node="tatooine",reason="least-loaded"}'
+        values: '0x480'
+      - series: 'tentacle_node_state{node="tatooine",state="Ready"}'
+        values: '1x480'
+      - series: 'tentacle_placement_mode{mode="Active"}'
+        values: '1x480'
+      - series: 'tentacle_broker_up'
+        values: '1x480'
+    alert_rule_test:
+      - eval_time: 7h
+        alertname: TentaclesUnused
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "100% of transcodes ran on the server, not on tentacles"
+              description: >-
+                Tentacles are connected and usable, but over the last 6h more than 90% of
+                transcodes ran locally because no tentacle could take them (jobs the
+                server won on load, with its own slots, do not count). tentacle_placements_total{node="local"} says why
+                (path-ineligible, all-busy, no-hardware-tentacle, attach-timeout...); the
+                Tentacle dashboard page lists each job with its reason.
+      - eval_time: 7h
+        alertname: TentacleBrokerDown
+        exp_alerts: []
+
+  # Same traffic, mostly on the tentacle: quiet. In shadow mode: quiet too.
+  - interval: 1m
+    input_series:
+      - series: 'tentacle_placements_total{kind="Transcode",node="local",reason="all-busy"}'
+        values: '0+1x480'
+      - series: 'tentacle_placements_total{kind="Transcode",node="tatooine",reason="least-loaded"}'
+        values: '0+9x480'
+      - series: 'tentacle_node_state{node="tatooine",state="Ready"}'
+        values: '1x480'
+      - series: 'tentacle_placement_mode{mode="Active"}'
+        values: '1x480'
+    alert_rule_test:
+      - eval_time: 7h
+        alertname: TentaclesUnused
+        exp_alerts: []
+  - interval: 1m
+    input_series:
+      - series: 'tentacle_placements_total{kind="Transcode",node="local",reason="dry-run"}'
+        values: '0+1x480'
+      - series: 'tentacle_node_state{node="tatooine",state="Ready"}'
+        values: '1x480'
+      - series: 'tentacle_placement_mode{mode="Active"}'
+        values: '0x480'
+      - series: 'tentacle_placement_mode{mode="DryRun"}'
+        values: '1x480'
+    alert_rule_test:
+      - eval_time: 7h
+        alertname: TentaclesUnused
+        exp_alerts: []
+
+  # The server has slots of its own and wins most transcodes on load: intended, quiet.
+  - interval: 1m
+    input_series:
+      - series: 'tentacle_placements_total{kind="Transcode",node="local",reason="least-loaded-local"}'
+        values: '0+9x480'
+      - series: 'tentacle_placements_total{kind="Transcode",node="tatooine",reason="least-loaded"}'
+        values: '0+1x480'
+      - series: 'tentacle_node_state{node="tatooine",state="Ready"}'
+        values: '1x480'
+      - series: 'tentacle_placement_mode{mode="Active"}'
+        values: '1x480'
+    alert_rule_test:
+      - eval_time: 7h
+        alertname: TentaclesUnused
+        exp_alerts: []
+
+  # A tentacle disconnects; another fails a required check; failures and fallbacks pile up.
+  - interval: 1m
+    input_series:
+      - series: 'tentacle_node_state{node="mandalore",state="Disconnected"}'
+        values: '0x3 1x30'
+      - series: 'tentacle_node_state{node="tatooine",state="Disconnected"}'
+        values: '0x33'
+      - series: 'tentacle_node_check{node="tatooine",check="root:/config/cache/temp",required="true"}'
+        values: '1x3 0x30'
+      - series: 'tentacle_node_check{node="tatooine",check="root:/data/media",required="false"}'
+        values: '0x33'
+      - series: 'tentacle_jobs_total{node="tatooine",kind="Transcode",outcome="lost"}'
+        values: '0x3 1x3 2x3 3x30'
+      - series: 'tentacle_jobs_total{node="tatooine",kind="Transcode",outcome="ok"}'
+        values: '0+1x33'
+      - series: 'tentacle_placements_total{kind="Trickplay",node="local",reason="path-ineligible"}'
+        values: '0x10 1x23'
+      - series: 'tentacle_broker_up'
+        values: '1x33'
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: TentacleNodeDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              node: mandalore
+            exp_annotations:
+              summary: "Tentacle mandalore is disconnected"
+              description: >-
+                The agent on mandalore connected earlier and is gone: its pod is down,
+                it cannot reach the broker on :8097, or its token was rejected (see the agent's
+                log). Its jobs run elsewhere or locally meanwhile.
+      - eval_time: 20m
+        alertname: TentacleCheckFailing
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              node: tatooine
+              check: root:/config/cache/temp
+            exp_annotations:
+              summary: "Tentacle tatooine fails check root:/config/cache/temp"
+              description: >-
+                The tentacle is Degraded: a required check failed at its last verification.
+                root:<path> means the directory is not the same on the tentacle and the server
+                (missing mount, different volume, not writable); hardware:<type> means the
+                GPU self-test failed; uid means files would be written as another user. The
+                dashboard page shows the detail; "Verify" re-runs the checks.
+      - eval_time: 20m
+        alertname: TentacleTranscodeFailures
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              node: tatooine
+            exp_annotations:
+              summary: "3 transcodes failed on tatooine in the last hour"
+              description: >-
+                error: ffmpeg exited non-zero (it returns AVERROR & 0xff: 237 = ENODEV, usually
+                the GPU; 234 = EINVAL; 254 = ENOENT, a path missing on that host). lost: the
+                tentacle went away mid-job. failed: it could not start ffmpeg. Jellyfin's log
+                for each one is /config/log/FFmpeg.Transcode-*.log; the tentacle_job log lines
+                carry the job id and exit code.
+      - eval_time: 20m
+        alertname: TentaclePathIneligible
+        exp_alerts:
+          - exp_labels:
+              severity: info
+              kind: Trickplay
+            exp_annotations:
+              summary: "Trickplay jobs ran locally: a path is not shared with any tentacle"
+              description: >-
+                A job used a file outside every directory the tentacles proved they share, so
+                it ran on the server. The path is in the job's reason on the dashboard page
+                and in the tentacle_job log line. Share that directory (same path on every
+                tentacle) or add it to the plugin's extra shared directories.
+
+  # No broker metrics at all (plugin not loaded, Jellyfin metrics off), or a broker that cannot listen.
+  - interval: 1m
+    input_series:
+      - series: 'up{job="jellyfin"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: TentacleBrokerDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "The Tentacle broker is not running"
+              description: >-
+                Either Jellyfin is not exporting metrics (it is down, EnableMetrics is off, or
+                the plugin is not loaded), or the broker could not listen on its socket or
+                :8097 (the dashboard page shows the error). Every job runs on the server.
+  - interval: 1m
+    input_series:
+      - series: 'tentacle_broker_up'
+        values: '0x20'
+      - series: 'tentacle_node_state{node="tatooine",state="CoolingDown"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: TentacleBrokerDown
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+            exp_annotations:
+              summary: "The Tentacle broker is not running"
+              description: >-
+                Either Jellyfin is not exporting metrics (it is down, EnableMetrics is off, or
+                the plugin is not loaded), or the broker could not listen on its socket or
+                :8097 (the dashboard page shows the error). Every job runs on the server.
+      - eval_time: 25m
+        alertname: TentacleStuck
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              node: tatooine
+              state: CoolingDown
+            exp_annotations:
+              summary: "Tentacle tatooine has been CoolingDown for 20 minutes"
+              description: >-
+                Verifying: the agent never answered the share and hardware checks. CoolingDown:
+                its jobs keep failing for infrastructure reasons (lost connection, attach
+                timeout, spawn errors), so it is benched and re-tested with growing pauses.
+                The Jellyfin log has "Tentacle tatooine" lines with the cause.
