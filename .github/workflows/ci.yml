@@ -69,7 +69,7 @@ jobs:
           SOAK_SECONDS: '240'
         run: tests/e2e/soak.sh "${{ steps.version.outputs.version }}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: tentacle-${{ steps.version.outputs.version }}
           path: |
