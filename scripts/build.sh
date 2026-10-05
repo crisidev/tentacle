@@ -29,7 +29,7 @@ read -r -a arches <<<"${TENTACLE_ARCHES:-amd64 arm64}"
 vprops=(-p:Version="${version}" -p:AssemblyVersion="${version}.0" -p:FileVersion="${version}.0")
 
 do_test() {
-    "${dn[@]}" test Tentacle.slnx -c Release "${vprops[@]}"
+    "${dn[@]}" test --solution Tentacle.slnx -c Release "${vprops[@]}"
 }
 
 # promtool unit tests for the alerts; downloads promtool when it is not installed.
