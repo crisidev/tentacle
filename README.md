@@ -8,6 +8,8 @@
 
 **Is your Jellyfin server melting while three other machines sit idle?**
 
+**Blog post: [https://blog.crisidev.org/2026-10-05/](https://blog.crisidev.org/2026-10-05/)**
+
 Tentacle spreads [Jellyfin](https://jellyfin.org)'s transcoding across your machines.
 A plugin sends every ffmpeg job Jellyfin starts (playback transcodes, subtitle
 extraction, trickplay, audio analysis) to worker machines called **tentacles**, or runs
