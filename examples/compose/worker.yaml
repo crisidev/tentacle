@@ -12,7 +12,7 @@ services:
       PUID: "1000"   # the same uid as the server: files it writes must be the server's
       PGID: "1000"
       TZ: Etc/UTC
-      DOCKER_MODS: crisidev/tentacle:worker-1.0.0
+      DOCKER_MODS: crisidev/tentacle:worker-2.0.0
       TENTACLE_BROKER_URL: wss://jellyfin.lan:8097
       # From Dashboard → Tentacle on the server:
       TENTACLE_BROKER_FINGERPRINT: "AB:CD:...:EF"

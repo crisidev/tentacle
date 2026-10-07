@@ -1,9 +1,9 @@
 name: ci
 
 # Pull requests and pushes to main: unit tests, alert-rule tests, the plugin,
-# the NativeAOT binary (amd64 and arm64), the mod images, then the end-to-end
+# the NativeAOT binary (amd64 and arm64), the worker mod image, then the end-to-end
 # suites and a short soak against Jellyfin 12.1 in Docker. Pushes to main also
-# publish the :server-main / :worker-main mod images to Docker Hub.
+# publish the :worker-main mod image to Docker Hub.
 
 on:
   push:
@@ -46,14 +46,25 @@ jobs:
       - name: Alert rules (promtool test rules)
         run: scripts/build.sh rules
 
-      - name: Test, plugin, AOT binary, mod images
+      - name: Test, AOT binary, plugin, mod image
         env:
           TENTACLE_VERSION: ${{ steps.version.outputs.version }}
           TENTACLE_AOT_LOCAL: '1'
-        run: scripts/build.sh test plugin cli mod
+        run: scripts/build.sh test cli plugin mod
 
       - name: M0 smoke (Jellyfin 12.1 + worker)
         run: tests/e2e/m0-smoke.sh "${{ steps.version.outputs.version }}"
+
+      # The other Jellyfin lines the plugin is built for: 10.11 (its own build) and
+      # the newest 12.x (the 12.1 build). lscr.io: LinuxServer's own registry.
+      - name: M0 smoke and M1 e2e on Jellyfin 10.11 and 12.2
+        run: |
+          for img in lscr.io/linuxserver/jellyfin:version-10.11.11ubu2604 lscr.io/linuxserver/jellyfin:version-12.2ubu2604; do
+            echo "::group::${img}"
+            TENTACLE_BASE_IMAGE="${img}" tests/e2e/m0-smoke.sh "${{ steps.version.outputs.version }}"
+            TENTACLE_BASE_IMAGE="${img}" tests/e2e/m1-e2e.sh "${{ steps.version.outputs.version }}"
+            echo "::endgroup::"
+          done
 
       - name: M1 e2e (HLS on a tentacle, seek, stop, tentacle loss, metrics)
         run: tests/e2e/m1-e2e.sh "${{ steps.version.outputs.version }}"
@@ -91,10 +102,8 @@ jobs:
 
       # One multi-arch image per role (amd64 + arm64): the mod loader picks the
       # host's architecture. Nothing runs during the build, so no emulation.
-      - name: Push mod images (:server-main, :worker-main)
+      - name: Push the worker mod image (:worker-main)
         if: github.event_name == 'push' && github.repository == 'crisidev/tentacle'
         run: |
-          for role in server worker; do
-            docker buildx build -q --provenance=false --platform linux/amd64,linux/arm64 -f mod/Dockerfile --target "${role}" \
-              -t "${IMAGE}:${role}-main" --push dist/mod
-          done
+          docker buildx build -q --provenance=false --platform linux/amd64,linux/arm64 -f mod/Dockerfile \
+            -t "${IMAGE}:worker-main" --push dist/mod

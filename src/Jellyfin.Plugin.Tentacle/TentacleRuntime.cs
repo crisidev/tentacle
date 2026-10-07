@@ -68,7 +68,7 @@ public sealed partial class TentacleRuntime : IAsyncDisposable
         var config = Config;
         Options = new BrokerOptions
         {
-            SocketPath = Environment.GetEnvironmentVariable("TENTACLE_SOCKET") ?? config.SocketPath,
+            SocketPath = SocketPath(config, paths),
             AgentPort = config.AgentPort,
             Token = EnsureToken(config),
             Certificate = () => _certificate?.Current,
@@ -87,6 +87,9 @@ public sealed partial class TentacleRuntime : IAsyncDisposable
         };
 
         ApplyPreviousToken(config);
+
+        // The shims Jellyfin starts inherit it.
+        Environment.SetEnvironmentVariable("TENTACLE_SOCKET", Options.SocketPath);
 
         // Jellyfin's own registry: the metrics show up in its /metrics (EnableMetrics).
         Broker = new Broker(Options, loggerFactory.CreateLogger<Broker>(), new TentacleMetrics(Prometheus.Metrics.DefaultRegistry));
@@ -389,6 +392,24 @@ public sealed partial class TentacleRuntime : IAsyncDisposable
 
         Options.PreviousToken = TokenFromEnvironment ? string.Empty : config.PreviousToken;
         Options.PreviousTokenExpires = config.PreviousTokenExpires is { } until ? new DateTimeOffset(DateTime.SpecifyKind(until, DateTimeKind.Utc)) : null;
+    }
+
+    /// <summary>
+    /// Where the broker listens for shims: TENTACLE_SOCKET, else the configured path,
+    /// else <c>&lt;data&gt;/tentacle/broker.sock</c>, which Jellyfin's user can always create
+    /// (the old default under /run only existed with the server mod).
+    /// </summary>
+    private static string SocketPath(PluginConfiguration config, IApplicationPaths paths)
+    {
+        var env = Environment.GetEnvironmentVariable("TENTACLE_SOCKET");
+        if (!string.IsNullOrWhiteSpace(env))
+        {
+            return env;
+        }
+
+        return string.IsNullOrWhiteSpace(config.SocketPath) || string.Equals(config.SocketPath, ProtocolInfo.DefaultSocketPath, StringComparison.Ordinal)
+            ? Path.Combine(paths.DataPath, "tentacle", "broker.sock")
+            : config.SocketPath;
     }
 
     private static bool IsMetadataOnly(string? collectionType)

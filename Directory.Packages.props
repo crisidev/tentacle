@@ -1,8 +1,19 @@
 <Project>
-  <!-- Versions pinned to what Jellyfin 12.1 itself uses (jellyfin/Directory.Packages.props @ v12.1). -->
-  <ItemGroup>
+  <!--
+    The plugin is built twice: net10.0 against Jellyfin 12.1 (also loads on later
+    12.x) and net9.0 against Jellyfin 10.11.0 (loads on every 10.11.x). Built
+    against the oldest of each line: Jellyfin refuses a plugin whose ABI is newer
+    than itself. Other versions match what both lines use (prometheus-net 8.2.1).
+  -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
+    <PackageVersion Include="Jellyfin.Controller" Version="10.11.0" />
+    <PackageVersion Include="Jellyfin.Model" Version="10.11.0" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' != 'net9.0'">
     <PackageVersion Include="Jellyfin.Controller" Version="12.1.0" />
     <PackageVersion Include="Jellyfin.Model" Version="12.1.0" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageVersion Include="prometheus-net" Version="8.2.1" />
 
     <PackageVersion Include="StyleCop.Analyzers" Version="1.2.0-beta.556" />

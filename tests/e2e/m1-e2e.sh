@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# M1 acceptance: real Jellyfin 12.1 (server mod) + one tentacle (worker mod) sharing
+# M1 acceptance: real Jellyfin 12.1 (the plugin) + one tentacle (worker mod) sharing
 # the media, transcode and temp volumes at the same paths, software encoding.
 #   - an HLS transcode runs on the tentacle, with progress relayed to Jellyfin's log
 #   - seeking replaces the remote ffmpeg; stopping playback ends it
@@ -8,7 +8,10 @@
 #   tests/e2e/m1-e2e.sh [version]   (needs scripts/build.sh mod first)
 set -euo pipefail
 version="${1:-$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$(dirname "$0")/../../Directory.Build.props")}"
-base="linuxserver/jellyfin:version-12.1ubu2604"
+# TENTACLE_BASE_IMAGE picks the Jellyfin under test; a 10.11 image gets the
+# plugin built for 10.11.
+base="${TENTACLE_BASE_IMAGE:-linuxserver/jellyfin:version-12.1ubu2604}"
+plugin_suffix=""; [[ "$base" == *:version-10.11* ]] && plugin_suffix="-10.11"
 net=tentacle-e2e
 srv=tentacle-e2e-server
 wrk=tentacle-e2e-worker
@@ -25,7 +28,7 @@ cleanup() {
 cleanup
 
 for role in server worker; do
-    printf 'FROM %s\nCOPY --from=tentacle:%s-%s / /\nRUN mkdir -p /config/data/data /config/cache && chown -R 1000:1000 /config\n' "$base" "$role" "$version" | docker build -q -t "tentacle-dev:${role}" - >/dev/null
+    printf 'FROM %s\nCOPY --from=tentacle:%s-%s / /\nRUN mkdir -p /config/data/data /config/cache && chown -R 1000:1000 /config\n' "$base" "$role" "$version$([[ "$role" == server ]] && echo "$plugin_suffix")" | docker build -q -t "tentacle-dev:${role}" - >/dev/null
 done
 docker network create "$net" >/dev/null
 for v in "${vols[@]}"; do docker volume create "$v" >/dev/null; done

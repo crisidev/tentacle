@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
-# M0 acceptance, locally: Jellyfin 12.1 starts through the shim with the plugin
-# Active and its dashboard page listed; a worker runs the agent, not Jellyfin.
-# The mod layer is copied in at build time, which is what docker-mods does at
+# M0 acceptance, locally: stock Jellyfin 12.1 with only the plugin installed runs
+# ffmpeg through the shim, with the plugin Active and its dashboard page listed;
+# pointing FFMPEG_PATH at the installed shim (the supported way, for any image)
+# works too; a worker runs the agent, not Jellyfin.
+# The plugin is unpacked where Jellyfin's repository install puts it, and the
+# worker mod layer is copied in at build time, which is what docker-mods does at
 # container start (cp of the single mod layer before the s6 DB is compiled).
 #   tests/e2e/m0-smoke.sh [version]   (needs scripts/build.sh mod first)
 set -euo pipefail
 version="${1:-$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$(dirname "$0")/../../Directory.Build.props")}"
-base="linuxserver/jellyfin:version-12.1ubu2604"
+# TENTACLE_BASE_IMAGE picks the Jellyfin under test; a 10.11 image gets the
+# plugin built for 10.11.
+base="${TENTACLE_BASE_IMAGE:-linuxserver/jellyfin:version-12.1ubu2604}"
+plugin_suffix=""; [[ "$base" == *:version-10.11* ]] && plugin_suffix="-10.11"
 net=tentacle-smoke
 fail() { echo "FAIL: $*" >&2; exit 1; }
 cleanup() { docker rm -f tentacle-smoke-server tentacle-smoke-worker >/dev/null 2>&1 || true; docker network rm "$net" >/dev/null 2>&1 || true; }
@@ -14,7 +20,7 @@ trap cleanup EXIT
 cleanup
 
 for role in server worker; do
-    printf 'FROM %s\nCOPY --from=tentacle:%s-%s / /\nRUN mkdir -p /config/data/data /config/cache && chown -R 1000:1000 /config\n' "$base" "$role" "$version" |
+    printf 'FROM %s\nCOPY --from=tentacle:%s-%s / /\nRUN mkdir -p /config/data/data /config/cache && chown -R 1000:1000 /config\n' "$base" "$role" "$version$([[ "$role" == server ]] && echo "$plugin_suffix")" |
         docker build -q -t "tentacle-dev:${role}" - >/dev/null
 done
 docker network create "$net" >/dev/null
@@ -30,9 +36,9 @@ for _ in $(seq 120); do
 done
 [[ "$(curl -s "http://localhost:8096/health")" == "Healthy" ]] || { docker logs tentacle-smoke-server | tail -40; fail "server not healthy"; }
 
-ffmpeg_path="$(docker exec tentacle-smoke-server sed -n 's:.*<EncoderAppPathDisplay>\(.*\)</EncoderAppPathDisplay>.*:\1:p' /config/encoding.xml)"
-echo "encoder path: ${ffmpeg_path}"
-[[ "$ffmpeg_path" == "/usr/local/bin/tentacle/ffmpeg" ]] || fail "Jellyfin is not using the shim"
+shim=/config/data/data/tentacle/bin/ffmpeg
+docker exec tentacle-smoke-server sh -c "grep -h 'Jellyfin runs ffmpeg through the shim' /config/log/*.log" | grep -F "$shim" \
+    || { docker exec tentacle-smoke-server sh -c "grep -h 'Tentacle' /config/log/*.log" | tail -20; fail "Jellyfin is not using the shim"; }
 
 api="http://localhost:8096"
 auth='MediaBrowser Client="tentacle-smoke", Device="smoke", DeviceId="tentacle-smoke", Version="1"'
@@ -54,6 +60,25 @@ echo "menu pages: ${pages}"
 [[ "$pages" == *Tentacle* ]] || fail "dashboard page not in main menu"
 curl -sf "$api/web/ConfigurationPage?name=Tentacle" -H "$h" | grep 'TentacleConfigPage' >/dev/null || fail "page not served"
 docker exec tentacle-smoke-server sh -c "grep -h 'Tentacle .* started' /config/log/*.log" || fail "hosted service did not start"
+
+echo "== server, FFMPEG_PATH at the shim"
+# LinuxServer's svc-jellyfin ignores FFMPEG_PATH while the file is missing, so on
+# a fresh /config the plugin swaps the shim in; from the next start Jellyfin
+# validates and runs the shim itself.
+docker rm -f tentacle-smoke-server >/dev/null
+docker run -d --name tentacle-smoke-server --network "$net" -e PUID=1000 -e PGID=1000 -e FFMPEG_PATH="$shim" tentacle-dev:server >/dev/null
+for _ in $(seq 120); do
+    [[ "$(curl -s "http://localhost:8096/health" || true)" == "Healthy" ]] && break
+    sleep 1
+done
+docker restart tentacle-smoke-server >/dev/null
+sleep 5
+for _ in $(seq 120); do
+    [[ "$(curl -s "http://localhost:8096/health" || true)" == "Healthy" ]] && break
+    sleep 1
+done
+[[ "$(curl -s "http://localhost:8096/health")" == "Healthy" ]] || { docker logs tentacle-smoke-server | tail -40; fail "server not healthy with FFMPEG_PATH at the shim"; }
+docker exec tentacle-smoke-server sh -c "grep -h 'is a Tentacle shim' /config/log/*.log" >/dev/null || fail "FFMPEG_PATH at the shim not recognised"
 
 echo "== worker"
 docker run -d --name tentacle-smoke-worker --network "$net" -e PUID=1000 -e PGID=1000 \

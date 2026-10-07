@@ -1,10 +1,12 @@
 ---
-# Jellyfin plugin repository metadata (JPRM). Only the plugin project is built
-# for the repository; the tentacle binary ships in the mod images.
+# Jellyfin plugin repository metadata (JPRM). The plugin zip carries the tentacle
+# binary for each architecture (the shim it installs); scripts/release.sh builds the
+# repository's manifest.json from this file and CHANGELOG.md.
 # The full history is in CHANGELOG.md; scripts/release.sh reads the release notes from it.
 name: "Tentacle"
 guid: "3a65d525-990c-4f73-89e9-a0d1500a53d2"
-version: "1.0.0.0"
+version: "2.0.0.1"
+# The 12 build; scripts/build.sh also builds net9.0 for targetAbi 10.11.0.0.
 targetAbi: "12.1.0.0"
 framework: "net10.0"
 owner: "crisidev"
@@ -19,9 +21,9 @@ artifacts:
   - "Jellyfin.Plugin.Tentacle.dll"
   - "Tentacle.Broker.dll"
   - "Tentacle.Protocol.dll"
+  - "tentacle-amd64"
+  - "tentacle-arm64"
 changelog: >
-  1.0.0: First public release, with full documentation, Docker Compose and
-  Kubernetes examples, and releases on GitHub. Security hardening: jobs inherit
-  only the agent's locale, PATH and GPU driver variables; driver names must be
-  bare words; verification resolves symlinks and ".."; the shim socket fails
-  closed; the agent port no longer serves job history. See CHANGELOG.md for the history.
+  2.0.0: The server needs only the plugin, from the plugin repository: it
+  installs the shim itself (no server mod), for any Jellyfin on Linux. Builds
+  for Jellyfin 12.1+ and 10.11. See CHANGELOG.md for the history.

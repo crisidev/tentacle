@@ -22,8 +22,8 @@ container when there is none.
 ```sh
 scripts/build.sh test                  # unit tests
 scripts/build.sh rules                 # promtool tests for the alert rules
-scripts/build.sh                       # everything: tests, plugin, AOT binary, both mod images
-TENTACLE_ARCHES=amd64 scripts/build.sh plugin cli mod   # quicker, amd64 only
+scripts/build.sh                       # everything: tests, AOT binary, plugin, worker mod image
+TENTACLE_ARCHES=amd64 scripts/build.sh cli plugin mod   # quicker (the plugin still needs both binaries)
 ```
 
 The NativeAOT binary is always built in the `sdk:10.0-noble-aot` container (unless
@@ -32,8 +32,9 @@ LinuxServer image has.
 
 ## Testing
 
-Unit tests run with `scripts/build.sh test`. The end-to-end suites start Jellyfin 12.1
-with the server mod and workers with the worker mod in Docker, after `scripts/build.sh mod`:
+Unit tests run with `scripts/build.sh test`. The end-to-end suites start Jellyfin 12.1 (or
+the image in `TENTACLE_BASE_IMAGE`, e.g. `lscr.io/linuxserver/jellyfin:version-10.11.11ubu2604`)
+with the plugin installed and workers with the worker mod in Docker, after `scripts/build.sh mod`:
 
 ```sh
 tests/e2e/m0-smoke.sh    # the server starts with the shim; a worker registers
@@ -66,7 +67,7 @@ in the pull request that you could not.
 
 ## Releases
 
-One version covers every artifact: the plugin, the binary and both mod images. To cut
+One version covers every artifact: the plugin, the binary and the worker mod image. To cut
 a release, bump `<Version>` in `Directory.Build.props` and `version` in `build.yaml`, add
 the entry at the top of `CHANGELOG.md` and the one-paragraph summary in `build.yaml`,
 merge to main, wait for CI to pass, then push the `vX.Y.Z` tag. The release workflow

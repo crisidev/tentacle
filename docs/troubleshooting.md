@@ -26,4 +26,5 @@
   line has the exit code (237 is usually the GPU, 254 a missing path). Set
   `TENTACLE_DEBUG=1` on the server for the shim's own decisions.
 * **Rule it out.** `TENTACLE_DISABLE=1` on the server makes the shim run the real ffmpeg
-  every time; removing the server mod takes Tentacle out completely.
+  every time; uninstalling the plugin (and unsetting `JELLYFIN_FFMPEG` if you pointed it
+  at the shim) takes Tentacle out completely.

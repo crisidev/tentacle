@@ -1,6 +1,6 @@
 #!/usr/bin/with-contenv bash
 # shellcheck shell=bash
-# Tentacle mod init (both roles). Runs after init-mods, before package installs.
+# Tentacle worker mod init. Runs after init-mods, before package installs.
 
 echo "**** tentacle: $(/usr/local/bin/tentacle/tentacle version) ****"
 
@@ -9,12 +9,6 @@ echo "**** tentacle: $(/usr/local/bin/tentacle/tentacle version) ****"
 ln -sf tentacle /usr/local/bin/tentacle/ffmpeg
 ln -sf tentacle /usr/local/bin/tentacle/ffprobe
 
-# Broker socket (server) and agent status file (worker) live here.
+# The agent's status file lives here.
 mkdir -p /run/tentacle
 lsiown abc:abc /run/tentacle
-
-for script in /tentacle/init.d/*.sh; do
-    [[ -f "${script}" ]] || continue
-    # shellcheck disable=SC1090
-    source "${script}"
-done

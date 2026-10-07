@@ -2,14 +2,17 @@
 # M2 acceptance: verification, per-kind placement, draining.
 #   worker1: every share            -> Ready
 #   worker2: no temp share          -> Degraded (still used for jobs that do not need temp)
-#   worker3: reports ffmpeg 7.1     -> Incompatible (never used)
+#   worker3: reports ffmpeg 6.0     -> Incompatible (never used)
 # Checks: a local-only library stays local (path-ineligible) with a real exit code;
 # subtitle extraction, attachment extraction (the cwd variant, for ASS burn-in) and
 # trickplay run on tentacles; trickplay only where temp is shared; SIGTERM drains.
 #   tests/e2e/m2-e2e.sh [version]   (needs scripts/build.sh mod first; KEEP=1 keeps containers)
 set -euo pipefail
 version="${1:-$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$(dirname "$0")/../../Directory.Build.props")}"
-base="linuxserver/jellyfin:version-12.1ubu2604"
+# TENTACLE_BASE_IMAGE picks the Jellyfin under test; a 10.11 image gets the
+# plugin built for 10.11.
+base="${TENTACLE_BASE_IMAGE:-linuxserver/jellyfin:version-12.1ubu2604}"
+plugin_suffix=""; [[ "$base" == *:version-10.11* ]] && plugin_suffix="-10.11"
 p=tentacle-m2
 net=$p
 srv=$p-server
@@ -30,7 +33,7 @@ cleanup() {
 cleanup
 
 for role in server worker; do
-    printf 'FROM %s\nCOPY --from=tentacle:%s-%s / /\nRUN mkdir -p /config/data/data /config/cache && chown -R 1000:1000 /config\n' "$base" "$role" "$version" | docker build -q -t "tentacle-dev:${role}" - >/dev/null
+    printf 'FROM %s\nCOPY --from=tentacle:%s-%s / /\nRUN mkdir -p /config/data/data /config/cache && chown -R 1000:1000 /config\n' "$base" "$role" "$version$([[ "$role" == server ]] && echo "$plugin_suffix")" | docker build -q -t "tentacle-dev:${role}" - >/dev/null
 done
 docker network create "$net" >/dev/null
 for v in "${vols[@]}"; do docker volume create "$p-$v" >/dev/null; done
@@ -96,7 +99,7 @@ fp="$(get Tentacle/Status | jq -r '.TlsFingerprint')"
 worker() { docker run -d --name "$p-$1" --network "$net" "${env[@]}" -e TENTACLE_BROKER_URL="wss://$srv:8097" -e TENTACLE_ROOTS=/data/media:/config/cache/transcodes:/config/cache/temp:/config/data/data/subtitles:/config/data/data/attachments -e TENTACLE_BROKER_FINGERPRINT="$fp" -e TENTACLE_NODE_NAME="$1" "${@:2}" tentacle-dev:worker >/dev/null; }
 worker worker1 "${m_media[@]}" "${m_transcodes[@]}" "${m_temp[@]}" "${m_subs[@]}" -e TENTACLE_DRAIN_SECONDS=6 -e S6_SERVICES_GRACETIME=20000 -e S6_KILL_GRACETIME=20000
 worker worker2 "${m_media[@]}" "${m_transcodes[@]}" "${m_subs[@]}"
-worker worker3 "${m_media[@]}" "${m_transcodes[@]}" "${m_temp[@]}" "${m_subs[@]}" -e TENTACLE_FAKE_FFMPEG_VERSION="ffmpeg version 7.1.1-Jellyfin Copyright"
+worker worker3 "${m_media[@]}" "${m_transcodes[@]}" "${m_temp[@]}" "${m_subs[@]}" -e TENTACLE_FAKE_FFMPEG_VERSION="ffmpeg version 6.0.1-Jellyfin Copyright"
 state() { get Tentacle/Nodes | jq -r --arg n "$1" '.[] | select(.Name==$n) | .State'; }
 for _ in $(seq 60); do
     [[ "$(state worker1)/$(state worker2)/$(state worker3)" == Ready/Degraded/Incompatible ]] && break
@@ -105,7 +108,7 @@ done
 get Tentacle/Nodes | jq -c '.[] | {Name,State,failed:[.Checks[] | select(.Ok|not) | .Name]}'
 [[ "$(state worker1)" == Ready ]] || fail "worker1 not Ready"
 [[ "$(state worker2)" == Degraded ]] || fail "worker2 (no temp share) not Degraded"
-[[ "$(state worker3)" == Incompatible ]] || fail "worker3 (ffmpeg 7.1) not Incompatible"
+[[ "$(state worker3)" == Incompatible ]] || fail "worker3 (ffmpeg 6.0) not Incompatible"
 
 jobs() { get 'Tentacle/Jobs?limit=200'; }
 hls() { echo "MediaSourceId=$2&VideoCodec=h264&AudioCodec=aac&VideoBitrate=2000000&AudioBitrate=128000&MaxWidth=1280&SegmentContainer=ts&PlaySessionId=$1&DeviceId=m2-$1&ApiKey=${at}${3:-}"; }

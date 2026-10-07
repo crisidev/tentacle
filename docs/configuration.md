@@ -17,7 +17,7 @@ check, or after a restart).
 | Also shared | | Extra directories ffmpeg uses that Tentacle cannot derive from Jellyfin's settings (fonts, for example). |
 | Encryption | Self-signed | TLS with a self-signed certificate, TLS with your certificate files, or none. |
 | Port tentacles connect to | 8097 | |
-| Socket for the local ffmpeg shim | `/run/tentacle/broker.sock` | Only together with `TENTACLE_SOCKET`. |
+| Socket for the local ffmpeg shim | `<data>/tentacle/broker.sock` | Empty for the default. `TENTACLE_SOCKET` overrides it. |
 | Token | generated | Replace it with an overlap, or set `TENTACLE_TOKEN`. See [Security](security.md). |
 
 ## Server environment
@@ -28,9 +28,9 @@ check, or after a restart).
 | `TENTACLE_PREVIOUS_TOKEN` | | Still accepted while set: the overlap for rotating `TENTACLE_TOKEN`. |
 | `TENTACLE_NODE_NAME` | hostname | How the server is named on the dashboard and in metrics. |
 | `TENTACLE_TLS_CERT`, `TENTACLE_TLS_KEY` | | Serve this certificate (PEM, or `.pfx`) instead of the self-signed one. Reloaded when the files change. |
-| `TENTACLE_INSTALL_PLUGIN` | `true` | Server mod: install the bundled plugin. |
-| `TENTACLE_SOCKET` | `/run/tentacle/broker.sock` | The shim's socket. |
-| `TENTACLE_REAL_DIR` | `/usr/lib/jellyfin-ffmpeg` | Where the real ffmpeg and ffprobe are. |
+| `JELLYFIN_FFMPEG` (`FFMPEG_PATH` in the LinuxServer image) | Jellyfin's | Optional: set it to the shim, `<data>/tentacle/bin/ffmpeg`, so Jellyfin starts the shim through its supported setting. Without it the plugin switches Jellyfin to the shim itself. See [Installation](installation.md#how-jellyfin-runs-the-shim). |
+| `TENTACLE_SOCKET` | `<data>/tentacle/broker.sock` | The shim's socket. The plugin passes it to the shims Jellyfin starts. |
+| `TENTACLE_REAL_DIR` | the directory of Jellyfin's ffmpeg, else `/usr/lib/jellyfin-ffmpeg` | Where the real ffmpeg and ffprobe are. Set it when `JELLYFIN_FFMPEG` points at the shim and the real ffmpeg is not in `/usr/lib/jellyfin-ffmpeg`. |
 | `TENTACLE_DISABLE` | | `1`: the shim always runs the real ffmpeg, without asking the broker. |
 | `TENTACLE_DEBUG` | | `1`: the shim logs its decisions to ffmpeg's stderr (Jellyfin's FFmpeg logs). |
 | `TMPDIR` | `/tmp` | Not Tentacle's, but set it to a shared directory: Jellyfin writes trickplay and image extraction under `$TMPDIR/jellyfin`. |

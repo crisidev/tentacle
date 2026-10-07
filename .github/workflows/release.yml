@@ -2,10 +2,10 @@ name: release
 
 # vX.Y.Z tags: build, run the unit and alert-rule tests (the end-to-end suites
 # and the soak already ran on main for that commit, so tag main only after its
-# ci run is green), push crisidev/tentacle:{server,worker}-X.Y.Z to Docker Hub
-# (public: LinuxServer's mod loader pulls anonymously) and create the GitHub
-# release with the plugin zip, the binaries, the alert rules, the Grafana board,
-# SHA256SUMS and the image references pinned by digest.
+# ci run is green), push crisidev/tentacle:worker-X.Y.Z to Docker Hub (public:
+# LinuxServer's mod loader pulls anonymously) and create the GitHub release with
+# the plugin zip, the plugin repository manifest, the binaries, the alert rules,
+# the Grafana board, SHA256SUMS and the worker image reference pinned by digest.
 # Needs the DOCKERHUB_USERNAME and DOCKERHUB_TOKEN secrets (a Docker Hub access
 # token with Read & Write only).
 
@@ -48,11 +48,11 @@ jobs:
       - name: Alert rules (promtool test rules)
         run: scripts/build.sh rules
 
-      - name: Test, plugin, AOT binary, mod images
+      - name: Test, AOT binary, plugin, mod image
         env:
           TENTACLE_VERSION: ${{ steps.version.outputs.version }}
           TENTACLE_AOT_LOCAL: '1'
-        run: scripts/build.sh test plugin cli mod
+        run: scripts/build.sh test cli plugin mod
 
       - uses: docker/login-action@v4
         with:
@@ -61,18 +61,15 @@ jobs:
 
       - uses: docker/setup-buildx-action@v4
 
-      - name: Push mod images
+      - name: Push the worker mod image
         run: |
           v="${{ steps.version.outputs.version }}"
-          : > dist/digests.txt
-          for role in server worker; do
-            docker buildx build -q --provenance=false --platform linux/amd64,linux/arm64 -f mod/Dockerfile --target "${role}" \
-              -t "${IMAGE}:${role}-${v}" --metadata-file "dist/meta-${role}.json" --push dist/mod
-            # What to put in DOCKER_MODS: tag plus digest (a tag can be overwritten,
-            # a digest cannot). The release notes list these.
-            digest="$(jq -r '."containerimage.digest"' "dist/meta-${role}.json")"
-            echo "${role} crisidev/tentacle:${role}-${v}@${digest}" | tee -a dist/digests.txt
-          done
+          docker buildx build -q --provenance=false --platform linux/amd64,linux/arm64 -f mod/Dockerfile \
+            -t "${IMAGE}:worker-${v}" --metadata-file dist/meta-worker.json --push dist/mod
+          # What to put in DOCKER_MODS: tag plus digest (a tag can be overwritten,
+          # a digest cannot). The release notes list it.
+          digest="$(jq -r '."containerimage.digest"' dist/meta-worker.json)"
+          echo "worker crisidev/tentacle:worker-${v}@${digest}" | tee dist/digests.txt
 
       - name: GitHub release
         env:

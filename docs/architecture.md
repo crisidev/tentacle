@@ -12,8 +12,8 @@ Jellyfin ──spawns──▶ shim (ffmpeg → tentacle)
    └─ :8097 wss ◀── control + one WebSocket per job ── tentacle agent ── sandbox → ffmpeg
 ```
 
-1. The server mod points Jellyfin's ffmpeg at **the shim**, the `tentacle` binary under
-   another name. Information queries and Jellyfin's startup probes go straight to the
+1. The plugin points Jellyfin's ffmpeg at **the shim**, the `tentacle` binary under
+   another name, which it ships and installs. Information queries and Jellyfin's startup probes go straight to the
    real ffmpeg.
 2. For a real job, the shim asks **the broker**, which runs inside the plugin on its own
    Kestrel, where it should run. No answer within 2 s, or no broker at all: it runs
@@ -29,16 +29,17 @@ Jellyfin ──spawns──▶ shim (ffmpeg → tentacle)
 
 ## Constraints from Jellyfin
 
-Jellyfin 12.1 needs a real local process for ffmpeg. `TranscodingJob` holds a
+Jellyfin (10.11 and 12) needs a real local process for ffmpeg. `TranscodingJob` holds a
 `Process`, writes to its stdin and kills it, so a stand-in binary is unavoidable. For
 Tentacle, "native" means that the scheduling, the registry, the configuration, the
 metrics and the UI all live in a Jellyfin plugin. The binary Jellyfin starts is only a
 thin local proxy for the remote process.
 
 - **The ffmpeg path.** Jellyfin takes it from `--ffmpeg`/`JELLYFIN_FFMPEG`, then from
-  `encoding.xml`, then from `PATH`. Neither the dashboard nor a plugin can change it,
-  so the LinuxServer mod sets `FFMPEG_PATH` to the shim. ffprobe is resolved as the
-  sibling file `ffprobe`.
+  `encoding.xml`, then from `PATH`, once, in `IMediaEncoder.SetFFmpegPath()`, after
+  the plugins' hosted services have started. There is no supported way for a plugin to
+  change it; see [the shim installer](#the-shim-installer) for what the plugin does.
+  ffprobe is resolved as the sibling file `ffprobe`.
 - **Startup probes.** Jellyfin validates ffmpeg (`-version`, `-encoders`, lavfi test
   encodes...) before plugins start. The shim answers these on its own by running the
   real binary.
@@ -55,7 +56,7 @@ thin local proxy for the remote process.
 - **Plugins.** `IPluginServiceRegistrator` registers into the web host's container, so
   hosted services work. Jellyfin's own port intercepts every WebSocket upgrade, so the
   broker runs **its own Kestrel**: a unix socket for shims and TCP 8097 for agents.
-- **LinuxServer mods** are applied before the s6 service database is compiled. They can
+- **LinuxServer mods** (the worker) are applied before the s6 service database is compiled. They can
   add or overwrite files but not delete them, so the worker role overwrites
   `svc-jellyfin/run`, and readiness is signalled on fd 3.
 
@@ -97,7 +98,8 @@ are at most 64 KiB; control payloads are JSON.
 
 **Endpoints.**
 
-- Shim: the unix socket `$TENTACLE_SOCKET` (default `/run/tentacle/broker.sock`). The
+- Shim: the unix socket `$TENTACLE_SOCKET`, which the plugin sets in Jellyfin's
+  environment (default `<data>/tentacle/broker.sock`). The
   broker checks with `SO_PEERCRED` that the peer runs as its own uid.
 - Agents, on the agent port (8097, TLS by default):
   - `GET /tentacle/v1/control`: the control WebSocket, `Authorization: Bearer <token>`,
@@ -127,8 +129,8 @@ only ever added. A shim on an unsupported version runs locally.
 ## The shim
 
 1. Read argv[0] from `/proc/self/cmdline` (NativeAOT resolves symlinks, so the usual
-   API would not show it). The real binaries are in `$TENTACLE_REAL_DIR` (default
-   `/usr/lib/jellyfin-ffmpeg`). Only raw fds 0-2 are used, never `Console`.
+   API would not show it). The real binaries are in `$TENTACLE_REAL_DIR` (set by the
+   plugin to the directory of Jellyfin's ffmpeg; default `/usr/lib/jellyfin-ffmpeg`). Only raw fds 0-2 are used, never `Console`.
 2. Exec the real binary straight away when `TENTACLE_DISABLE=1`, for information
    queries (`-version`, `-encoders`, `-hwaccels`...) and when there is no real input
    (lavfi or null only). This covers all of Jellyfin's startup probes.
@@ -218,17 +220,41 @@ Jellyfin registers a transcoding job before it starts ffmpeg. When a shim connec
 plugin maps the job's output path back to the transcoding job, so the dashboard, the job
 API and the log line show the user, app, device and library item of each job.
 
-## The LinuxServer mod
+## The shim installer
 
-One build, two tags, each a single layer (the mod loader applies only the first):
+The server needs only the plugin. It is built twice from the same source: net10.0
+against Jellyfin 12.1 (it also loads on later 12.x) and net9.0 against Jellyfin 10.11.0;
+both lines have the same `IMediaEncoder` and startup order. Its zip carries the `tentacle` binary for amd64 and
+arm64 next to the DLLs, so the plugin and the shim always come from the same build.
 
-- **common:** `/usr/local/bin/tentacle/tentacle` with `ffmpeg` and `ffprobe` symlinks,
-  and an init oneshot that creates `/run/tentacle` for `abc`.
-- **server:** sets `FFMPEG_PATH` to the shim and `TENTACLE_SOCKET`, and installs the
-  bundled plugin into `/config/data/plugins/Tentacle_<version>` (unless
-  `TENTACLE_INSTALL_PLUGIN=false`), removing older copies. The plugin, shim and agent
-  therefore always come from the same build.
-- **worker:** replaces `svc-jellyfin/run` with `tentacle agent`, so Jellyfin never starts.
+1. **When the plugin's hosted service starts** (before Jellyfin looks for ffmpeg), it
+   copies this machine's binary to `<data>/tentacle/bin/tentacle`, only when it changed
+   and by rename, and links `ffmpeg` and `ffprobe` to it. It sets `TENTACLE_SOCKET` in
+   Jellyfin's environment, which every ffmpeg Jellyfin starts inherits.
+2. **The plugin wraps `IMediaEncoder`.** Plugins register their services after
+   Jellyfin's own, so `PluginServiceRegistrator` replaces the registration with
+   `ShimMediaEncoder`, which forwards every call to Jellyfin's encoder (still built and
+   disposed by the container) except `SetFFmpegPath()`.
+3. **`SetFFmpegPath()`** first lets Jellyfin find, validate and interrogate its ffmpeg
+   as usual. Then:
+   - if that ffmpeg already is a shim (`JELLYFIN_FFMPEG` or `FFMPEG_PATH` points at it:
+     the supported way), nothing else happens;
+   - otherwise the plugin sets `TENTACLE_REAL_DIR` to the real ffmpeg's directory,
+     checks that the shim's `-version` matches the real one's, and writes the shim's
+     path into the encoder's private `_ffmpegPath`. That field is what `EncoderPath`
+     returns and what trickplay and image extraction use directly. `ProbePath` stays
+     the real ffprobe.
+4. Anything unexpected (no binary for this architecture, a `noexec` data directory,
+   a Jellyfin release without that field) leaves Jellyfin on its own ffmpeg, logs why
+   and shows it on the dashboard: every job runs on the server, as without Tentacle.
+   Setting `JELLYFIN_FFMPEG` to the shim does not depend on Jellyfin's internals.
+
+## The LinuxServer mod (tentacles)
+
+One image, a single layer (the mod loader applies only the first):
+`/usr/local/bin/tentacle/tentacle` with `ffmpeg` and `ffprobe` symlinks, an init
+oneshot that creates `/run/tentacle` (the agent's status file) for `abc`, and a
+`svc-jellyfin/run` replaced with `tentacle agent`, so Jellyfin never starts.
 
 ## Not done yet: other GPU vendors for hardware jobs
 

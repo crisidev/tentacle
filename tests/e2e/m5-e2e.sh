@@ -8,7 +8,10 @@
 #   tests/e2e/m5-e2e.sh [version]   (needs scripts/build.sh mod first)
 set -euo pipefail
 version="${1:-$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$(dirname "$0")/../../Directory.Build.props")}"
-base="linuxserver/jellyfin:version-12.1ubu2604"
+# TENTACLE_BASE_IMAGE picks the Jellyfin under test; a 10.11 image gets the
+# plugin built for 10.11.
+base="${TENTACLE_BASE_IMAGE:-linuxserver/jellyfin:version-12.1ubu2604}"
+plugin_suffix=""; [[ "$base" == *:version-10.11* ]] && plugin_suffix="-10.11"
 p=tentacle-m5
 srv=$p-server
 plugin=3a65d525-990c-4f73-89e9-a0d1500a53d2
@@ -28,7 +31,7 @@ cleanup() {
 cleanup
 
 for role in server worker; do
-    printf 'FROM %s\nCOPY --from=tentacle:%s-%s / /\nRUN mkdir -p /config/data/data /config/cache && chown -R 1000:1000 /config\n' "$base" "$role" "$version" | docker build -q -t "tentacle-dev:${role}" - >/dev/null
+    printf 'FROM %s\nCOPY --from=tentacle:%s-%s / /\nRUN mkdir -p /config/data/data /config/cache && chown -R 1000:1000 /config\n' "$base" "$role" "$version$([[ "$role" == server ]] && echo "$plugin_suffix")" | docker build -q -t "tentacle-dev:${role}" - >/dev/null
 done
 docker network create "$p" >/dev/null
 docker volume create "$p-config" >/dev/null

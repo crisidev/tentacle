@@ -1,15 +1,10 @@
-# LinuxServer docker mod for linuxserver/jellyfin. One build, two tags:
-#   --target server  ->  :server-<ver>  (shim + bundled plugin)
-#   --target worker  ->  :worker-<ver>  (shim + agent replacing svc-jellyfin)
-# docker-mods applies only the FIRST layer of a mod image, so each role is a
-# single COPY of a tree that scripts/build.sh already merged (common + role).
+# LinuxServer docker mod for linuxserver/jellyfin: turns the container into a
+# tentacle (worker). The server needs no mod: the Jellyfin plugin installs the shim.
+# docker-mods applies only the FIRST layer of a mod image, so the mod is a single
+# COPY of the tree scripts/build.sh prepared.
 # Build context is dist/mod, one tree per architecture: build with
 # --platform linux/amd64,linux/arm64 for a multi-arch image (no emulation needed:
 # nothing runs during the build). The mod loader picks the host's architecture.
-FROM scratch AS server
-ARG TARGETARCH
-COPY ${TARGETARCH}/server/ /
-
-FROM scratch AS worker
+FROM scratch
 ARG TARGETARCH
 COPY ${TARGETARCH}/worker/ /

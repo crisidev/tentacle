@@ -12,7 +12,10 @@ set -euo pipefail
 version="${1:-$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' "$(dirname "$0")/../../Directory.Build.props")}"
 seconds="${SOAK_SECONDS:-600}"
 fd_slack="${SOAK_FD_SLACK:-40}"
-base="linuxserver/jellyfin:version-12.1ubu2604"
+# TENTACLE_BASE_IMAGE picks the Jellyfin under test; a 10.11 image gets the
+# plugin built for 10.11.
+base="${TENTACLE_BASE_IMAGE:-linuxserver/jellyfin:version-12.1ubu2604}"
+plugin_suffix=""; [[ "$base" == *:version-10.11* ]] && plugin_suffix="-10.11"
 p=tentacle-soak
 srv=$p-server
 workers=(w1 w2)
@@ -37,7 +40,7 @@ cleanup
 work="$(mktemp -d)"
 
 for role in server worker; do
-    printf 'FROM %s\nCOPY --from=tentacle:%s-%s / /\nRUN mkdir -p /config/data/data /config/cache && chown -R 1000:1000 /config\n' "$base" "$role" "$version" | docker build -q -t "tentacle-dev:${role}" - >/dev/null
+    printf 'FROM %s\nCOPY --from=tentacle:%s-%s / /\nRUN mkdir -p /config/data/data /config/cache && chown -R 1000:1000 /config\n' "$base" "$role" "$version$([[ "$role" == server ]] && echo "$plugin_suffix")" | docker build -q -t "tentacle-dev:${role}" - >/dev/null
 done
 docker network create "$p" >/dev/null
 for v in "${vols[@]}"; do docker volume create "$v" >/dev/null; done
@@ -114,13 +117,18 @@ playback() {
     done
 }
 
+# Where the plugin installs the shim, and its broker socket (Jellyfin's data
+# directory; outside Jellyfin, TENTACLE_SOCKET must say where it is).
+shim_dir=/config/data/data/tentacle/bin
+shim_sock=/config/data/data/tentacle/broker.sock
+
 # Short jobs through the shim, as Jellyfin's uid: ffprobe (always local exec) and
 # a 1 s ffmpeg decode (through the broker, placed locally as "other").
 shim_jobs() {
     local movie="/data/media/movies/Soak (2026)/Soak (2026).mkv"
     while running; do
-        if docker exec -u abc "$srv" /usr/local/bin/tentacle/ffprobe -v error -show_format "$movie" >/dev/null 2>&1; then count probe-ok; else count probe-fail; fi
-        if docker exec -u abc "$srv" /usr/local/bin/tentacle/ffmpeg -v error -t 1 -i "$movie" -f null - >/dev/null 2>&1; then count shim-ok; else count shim-fail; fi
+        if docker exec -u abc "$srv" "$shim_dir/ffprobe" -v error -show_format "$movie" >/dev/null 2>&1; then count probe-ok; else count probe-fail; fi
+        if docker exec -u abc -e TENTACLE_SOCKET="$shim_sock" "$srv" "$shim_dir/ffmpeg" -v error -t 1 -i "$movie" -f null - >/dev/null 2>&1; then count shim-ok; else count shim-fail; fi
     done
 }
 
@@ -178,7 +186,7 @@ for w in "${workers[@]}"; do
     left="$(docker exec "$p-$w" pgrep -f /usr/lib/jellyfin-ffmpeg/ffmpeg 2>/dev/null | tr '\n' ' ' || true)"
     [[ -z "$left" ]] || fail "ffmpeg left on $w: $left"
 done
-left="$(docker exec "$srv" pgrep -f '^(/usr/lib/jellyfin-ffmpeg|/usr/local/bin/tentacle)/ff' 2>/dev/null | tr '\n' ' ' || true)"
+left="$(docker exec "$srv" pgrep -f "^(/usr/lib/jellyfin-ffmpeg|$shim_dir)/ff" 2>/dev/null | tr '\n' ' ' || true)"
 [[ -z "$left" ]] || fail "ffmpeg or shims left on the server: $left"
 stuck="$(get 'Tentacle/Jobs?limit=500' | jq '[.[] | select(.Outcome=="running")] | length')"
 [[ "$stuck" == 0 ]] || fail "$stuck jobs still 'running'"

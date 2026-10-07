@@ -5,10 +5,16 @@
     protocol. CI overrides it with -p:Version=x.y.z.
   -->
   <PropertyGroup>
-    <Version>1.0.0</Version>
+    <Version>2.0.0</Version>
     <AssemblyVersion>$(Version).0</AssemblyVersion>
     <FileVersion>$(Version).0</FileVersion>
-    <TargetFramework>net10.0</TargetFramework>
+    <!--
+      What runs inside Jellyfin is built twice: net9.0 for Jellyfin 10.11, net10.0 for
+      Jellyfin 12 (Directory.Packages.props picks the Jellyfin packages to match).
+      The tentacle binary and the tests are net10.0 only.
+    -->
+    <TargetFrameworks Condition="'$(MSBuildProjectName)' == 'Jellyfin.Plugin.Tentacle' or '$(MSBuildProjectName)' == 'Tentacle.Broker' or '$(MSBuildProjectName)' == 'Tentacle.Protocol'">net9.0;net10.0</TargetFrameworks>
+    <TargetFramework Condition="'$(TargetFrameworks)' == ''">net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>

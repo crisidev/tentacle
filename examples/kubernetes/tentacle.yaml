@@ -91,7 +91,7 @@ spec:
             - { name: PUID, value: "1000" }   # the same uid as the server
             - { name: PGID, value: "1000" }
             - { name: TZ, value: Etc/UTC }
-            - { name: DOCKER_MODS, value: "crisidev/tentacle:worker-1.0.0" }
+            - { name: DOCKER_MODS, value: "crisidev/tentacle:worker-2.0.0" }
             - name: TENTACLE_BROKER_URL
               value: wss://jellyfin-tentacle.jellyfin.svc.cluster.local:8097
             - name: TENTACLE_BROKER_FINGERPRINT   # from Dashboard → Tentacle

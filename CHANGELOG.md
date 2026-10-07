@@ -1,7 +1,26 @@
 # Changelog
 
-Every artifact (the plugin, the `tentacle` binary and both mod images) shares one
+Every artifact (the plugin, the `tentacle` binary and the worker mod image) shares one
 version. The plugin's own changelog in `build.yaml` carries the latest entry.
+
+## 2.0.0
+
+- The server needs only the plugin: no more server mod. The plugin ships the shim for
+  amd64 and arm64, installs it into `<data>/tentacle/bin` when Jellyfin starts, and
+  puts it in front of Jellyfin's ffmpeg, so any Jellyfin on Linux works (the
+  official image, LinuxServer's, distro packages). Pointing `JELLYFIN_FFMPEG`
+  (`FFMPEG_PATH` in the LinuxServer image) at the shim is the supported alternative;
+  when neither works, the dashboard says why and every job runs on the server.
+- Jellyfin 10.11 support: the plugin is also built for 10.11 (net9.0). The repository
+  lists both builds, `X.Y.Z.1` for Jellyfin 12.1 and later and `X.Y.Z.0` for 10.11, and
+  Jellyfin installs the one it can load. Tested on 10.11.11, 12.1 and 12.2.
+- A Jellyfin plugin repository: every release carries `manifest.json`; add
+  `https://github.com/crisidev/tentacle/releases/latest/download/manifest.json`.
+- The shim socket defaults to `<data>/tentacle/broker.sock` (it was
+  `/run/tentacle/broker.sock`, which only the server mod created).
+- The dashboard's server card shows the shim and the real ffmpeg.
+- Breaking: `crisidev/tentacle:server-*` is no longer published; tentacles keep
+  `crisidev/tentacle:worker-*`. To upgrade, see docs/installation.md.
 
 ## 1.0.0
 

@@ -1,4 +1,7 @@
-# Jellyfin with the Tentacle server mod.
+# Jellyfin for Tentacle. The server needs only the plugin: install it from the
+# repository https://github.com/crisidev/tentacle/releases/latest/download/manifest.json
+# (Dashboard → Plugins → Repositories, then the catalog) and restart. Any Jellyfin
+# 12.1+ or 10.11 image works; this one is LinuxServer's.
 #
 # Every directory ffmpeg reads or writes must be visible at the same path on the
 # server and on every tentacle: here /data/media (the libraries) and the shared
@@ -15,8 +18,10 @@ services:
       PUID: "1000"
       PGID: "1000"
       TZ: Etc/UTC
-      # The server mod: points Jellyfin at the shim and installs the plugin.
-      DOCKER_MODS: crisidev/tentacle:server-1.0.0
+      # Optional, the supported way to run the shim the plugin installs (without
+      # it the plugin switches Jellyfin over itself). Leave it unset until the
+      # plugin is installed. In the official image the variable is JELLYFIN_FFMPEG.
+      # FFMPEG_PATH: /config/data/data/tentacle/bin/ffmpeg
       # Jellyfin writes trickplay and extracted images under $TMPDIR/jellyfin:
       # it must be shared too, and /tmp is not.
       TMPDIR: /config/cache/temp

@@ -247,7 +247,7 @@
                             <div class="inputContainer">
                                 <label class="inputLabel inputLabelUnfocused" for="SocketPath">Socket for the local ffmpeg shim <span class="t-when">restart</span></label>
                                 <input id="SocketPath" type="text" is="emby-input" />
-                                <div class="fieldDescription">Only change this together with TENTACLE_SOCKET in the server mod.</div>
+                                <div class="fieldDescription">Empty: broker.sock in Jellyfin's data directory, next to the shim. TENTACLE_SOCKET overrides it.</div>
                             </div>
                         </fieldset>
 
@@ -377,9 +377,12 @@
                         + '<div><span class="t-k">Broker</span><span class="t-state ' + broker[0] + '">' + broker[1] + '</span></div>'
                         + '<div><span class="t-k">Tentacles usable</span><span class="t-state ' + (ready > 0 ? 'ok' : 'bad') + '">' + ready + ' of ' + (nodes.length - probes) + '</span>' + (probes ? ' <span class="t-note">(and ' + probes + ' detect only)</span>' : '') + '</div>'
                         + '<div><span class="t-k">Jobs running</span>' + running.length + (running.length ? ' <span class="t-note">(' + remote + ' on tentacles, ' + (running.length - remote) + ' on ' + esc(s.Server.Name) + ')</span>' : '') + '</div>';
-                    q('#TAlert').innerHTML = s.StartError
+                    q('#TAlert').innerHTML = (s.StartError
                         ? '<div class="t-alert"><strong>The broker is not running</strong>, so every job runs on this server. ' + esc(s.StartError) + '</div>'
-                        : '';
+                        : '')
+                        + (s.ShimError
+                        ? '<div class="t-alert"><strong>Jellyfin runs its own ffmpeg</strong>, so every job runs on this server. ' + esc(s.ShimError) + '</div>'
+                        : '');
                 }
 
                 function renderRunning(jobs) {
@@ -459,7 +462,8 @@
                         + load
                         + '<dl class="t-facts">'
                         + (s.LocalSlots > 0 ? '<dt>Weight</dt><dd>' + weight(s.LocalWeight, 'set below') + '</dd>' : '')
-                        + '<dt>ffmpeg</dt><dd>' + esc(ffmpegShort(s.ServerFfmpegVersion)) + '</dd>'
+                        + '<dt>ffmpeg</dt><dd>' + esc(ffmpegShort(s.ServerFfmpegVersion)) + (s.RealFfmpeg ? ' <span class="t-note">(' + esc(s.RealFfmpeg) + ')</span>' : '') + '</dd>'
+                        + '<dt>Shim</dt><dd>' + (s.ShimPath ? esc(s.ShimPath) : '<span class="t-state bad">Not in use</span>') + '</dd>'
                         + '<dt>Machine</dt><dd>' + esc(m.Arch) + ', ' + esc(m.CpuModel) + ' <span class="t-note">(' + m.Cores + ' CPUs, kernel ' + esc(m.Kernel) + ')</span></dd>'
                         + serverGpu(m)
                         + '<dt>Agent</dt><dd>' + esc(s.Version) + '</dd>'
@@ -649,7 +653,8 @@
                         q('#Placement').value = config.Placement;
                         q('#Token').value = config.Token || '';
                         q('#AgentPort').value = config.AgentPort;
-                        q('#SocketPath').value = config.SocketPath;
+                        // The old default under /run (the server mod's) now means the default too.
+                        q('#SocketPath').value = config.SocketPath === '/run/tentacle/broker.sock' ? '' : config.SocketPath;
                         q('#ExtraRoots').value = (config.ExtraRoots || []).join('\n');
                         q('#StrictFfmpegVersion').checked = config.StrictFfmpegVersion;
                         q('#MetricsNameViewers').checked = !!config.MetricsNameViewers;
@@ -741,7 +746,7 @@
                             config.Token = q('#Token').value.trim() || config.Token;
                         }
                         config.AgentPort = parseInt(q('#AgentPort').value, 10) || config.AgentPort;
-                        config.SocketPath = q('#SocketPath').value.trim() || config.SocketPath;
+                        config.SocketPath = q('#SocketPath').value.trim();
                         config.StrictFfmpegVersion = q('#StrictFfmpegVersion').checked;
                         config.MetricsNameViewers = q('#MetricsNameViewers').checked;
                         config.BackgroundNice = Math.min(19, Math.max(0, parseInt(q('#BackgroundNice').value, 10) || 0));

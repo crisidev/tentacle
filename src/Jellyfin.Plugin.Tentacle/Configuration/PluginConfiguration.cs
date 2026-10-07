@@ -36,9 +36,9 @@ public class PluginConfiguration : BasePluginConfiguration
     public int AgentPort { get; set; } = ProtocolInfo.DefaultAgentPort;
 
     /// <summary>
-    /// Gets or sets the unix socket the shims connect to.
+    /// Gets or sets the unix socket the shims connect to. Empty: &lt;data&gt;/tentacle/broker.sock.
     /// </summary>
-    public string SocketPath { get; set; } = ProtocolInfo.DefaultSocketPath;
+    public string SocketPath { get; set; } = string.Empty;
 
     /// <summary>
     /// Gets or sets the token agents authenticate with. Generated on first start;

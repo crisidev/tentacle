@@ -19,14 +19,17 @@ namespace Jellyfin.Plugin.Tentacle.Api;
 public class TentacleController : ControllerBase
 {
     private readonly TentacleRuntime _runtime;
+    private readonly ShimInstaller _shim;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TentacleController"/> class.
     /// </summary>
     /// <param name="runtime">The runtime.</param>
-    public TentacleController(TentacleRuntime runtime)
+    /// <param name="shim">The shim in front of Jellyfin's ffmpeg.</param>
+    public TentacleController(TentacleRuntime runtime, ShimInstaller shim)
     {
         _runtime = runtime;
+        _shim = shim;
     }
 
     /// <summary>
@@ -45,6 +48,9 @@ public class TentacleController : ControllerBase
             options.SocketPath,
             options.AgentPort,
             _runtime.CertificateError ?? _runtime.Host.StartError,
+            _shim.ShimPath,
+            _shim.RealPath,
+            _shim.Error,
             options.ServerFfmpegVersion(),
             _runtime.SharedRoots(),
             _runtime.MetricsEnabled,
@@ -115,6 +121,9 @@ public class TentacleController : ControllerBase
 /// <param name="SocketPath">The shim socket.</param>
 /// <param name="AgentPort">The agent port.</param>
 /// <param name="StartError">Why the broker is not listening, if it is not.</param>
+/// <param name="ShimPath">The ffmpeg Jellyfin runs, when it is the shim.</param>
+/// <param name="RealFfmpeg">The real ffmpeg behind the shim.</param>
+/// <param name="ShimError">Why Jellyfin runs its own ffmpeg instead of the shim, if it does.</param>
 /// <param name="ServerFfmpegVersion">The server's ffmpeg version line.</param>
 /// <param name="SharedRoots">The directories ffmpeg uses, which tentacles must share: path, whether ffmpeg writes there, whether a tentacle needs it to take jobs at all.</param>
 /// <param name="MetricsEnabled">Whether Jellyfin serves /metrics (where the Tentacle metrics are).</param>
@@ -137,6 +146,9 @@ public sealed record BrokerStatus(
     string SocketPath,
     int AgentPort,
     string? StartError,
+    string? ShimPath,
+    string? RealFfmpeg,
+    string? ShimError,
     string ServerFfmpegVersion,
     IReadOnlyList<SharedRoot> SharedRoots,
     bool MetricsEnabled,
