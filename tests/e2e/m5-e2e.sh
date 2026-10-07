@@ -46,6 +46,9 @@ start_server() {
 }
 
 echo "== server (TLS by default)"
+# The plugin is part of the server image's /config, and Docker copies an image's
+# files into a named volume only while it is empty: fill it from there first.
+docker run --rm --entrypoint true -v "$p-config:/config" tentacle-dev:server
 docker run --rm -v "$p-config:/config" alpine sh -c 'mkdir -p /config/data/data /config/cache && chown -R 1000:1000 /config'
 start_server
 auth='MediaBrowser Client="tentacle-e2e", Device="e2e", DeviceId="tentacle-m5", Version="1"'

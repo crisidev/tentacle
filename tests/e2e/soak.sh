@@ -44,6 +44,9 @@ for role in server worker; do
 done
 docker network create "$p" >/dev/null
 for v in "${vols[@]}"; do docker volume create "$v" >/dev/null; done
+# The plugin is part of the server image's /config, and Docker copies an image's
+# files into a named volume only while it is empty: fill it from there first.
+docker run --rm --entrypoint true -v "$p-config:/config" tentacle-dev:server
 docker run --rm -v $p-media:/a -v $p-transcodes:/b -v $p-temp:/c -v $p-config:/d alpine sh -c 'mkdir -p /d/data/data /d/cache && chown -R 1000:1000 /a /b /c /d'
 shared=(-v $p-media:/data/media -v $p-transcodes:/config/cache/transcodes -v $p-temp:/config/cache/temp)
 env=(-e PUID=1000 -e PGID=1000 -e TZ=Etc/UTC -e TMPDIR=/config/cache/temp -e TENTACLE_TOKEN=soak-token)
