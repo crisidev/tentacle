@@ -77,13 +77,14 @@ You need Jellyfin 10.11 or 12.1+ on Linux and **shared storage that every machin
 same paths**.
 
 1. **On the server**, add the plugin repository in **Dashboard → Plugins →
-   Repositories**:
+   Repositories** (any name, e.g. `Tentacle`):
 
    ```
    https://github.com/crisidev/tentacle/releases/latest/download/manifest.json
    ```
 
-   install **Tentacle** from the catalog, and restart Jellyfin. Open port 8097 for the
+   install **Tentacle** from the catalog, and restart Jellyfin. The repository has a
+   build for 12.1+ and one for 10.11: Jellyfin picks the one it can run. Open port 8097 for the
    tentacles, and point `TMPDIR` at a shared folder (trickplay writes there):
 
    ```yaml
