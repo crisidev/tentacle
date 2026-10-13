@@ -6,8 +6,8 @@
     than itself. Other versions match what both lines use (prometheus-net 8.2.1).
   -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
-    <PackageVersion Include="Jellyfin.Controller" Version="10.11.0" />
-    <PackageVersion Include="Jellyfin.Model" Version="10.11.0" />
+    <PackageVersion Include="Jellyfin.Controller" Version="10.11.11" />
+    <PackageVersion Include="Jellyfin.Model" Version="10.11.11" />
   </ItemGroup>
   <ItemGroup Condition="'$(TargetFramework)' != 'net9.0'">
     <PackageVersion Include="Jellyfin.Controller" Version="12.1.0" />
