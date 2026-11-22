@@ -12,6 +12,7 @@ Tentacle's metrics are in Jellyfin's own `/metrics` (enable `EnableMetrics` in
 | `tentacle_jobs_running` | node, kind | |
 | `tentacle_running_job_start_time_seconds` | job_id, node, kind, user, client, item | One series per running job (user, client and item only with "Name viewers in metrics"). |
 | `tentacle_placements_total` | kind, node, reason | Every placement decision and why. |
+| `tentacle_cross_vendor_total` | node, outcome | Transcodes considered for a tentacle with another vendor's GPU: `rebuilt`, `shadow`, or `skipped:<why>` (`no-match`, `ambiguous`, `no-anchor`, `hdr`, `copy`, `codec`, `no-video`, `job-type`, `vendor`, `error`). |
 | `tentacle_node_state` | node, state | A tentacle seen since the server started shows as `Disconnected` once gone. |
 | `tentacle_node_slots`, `tentacle_node_slots_used` | node, class | |
 | `tentacle_node_check` | node, check, required | Each verification check, 1 = passed. |

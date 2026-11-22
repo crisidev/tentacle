@@ -11,6 +11,11 @@
     that passed the self-test;
   * `all-busy`, `background-slots-full`: raise `TENTACLE_MAX_JOBS` /
     `TENTACLE_MAX_BACKGROUND_JOBS`, or add tentacles.
+  * `cross-vendor:<vendor>-<api>`: rebuilt for a tentacle with another vendor's GPU
+    (experimental setting). The job's details show the command line Jellyfin built and
+    the one that ran. `tentacle_cross_vendor_total{outcome=~"skipped:.*"}` says why a
+    transcode was not rebuilt; `no-match` after a Jellyfin upgrade means Jellyfin
+    changed how it writes the command line, and the job simply stays as built.
 * **A tentacle never shows up.** Its log has `[tentacle]` lines saying why: wrong
   fingerprint, refused token (401), unreachable port 8097, or a `ws://` URL.
 * **A tentacle is Degraded.** Expand its checks: a `root:<path>` check that fails means

@@ -3,6 +3,18 @@
 Every artifact (the plugin, the `tentacle` binary and the worker mod image) shares one
 version. The plugin's own changelog in `build.yaml` carries the latest entry.
 
+## Unreleased
+
+- Experimental, Jellyfin 12.1+, off by default: **cross-vendor transcoding**. A tentacle
+  whose GPU is another vendor's than the server's (AMD or NVIDIA for an Intel server) is
+  tested with its own hardware type (VAAPI, NVENC), and playback transcodes of SDR
+  sources may go there: the plugin rebuilds the transcode with Jellyfin's own
+  `EncodingHelper` for that GPU, and only when every GPU-dependent part of the command
+  line Jellyfin built is found exactly as expected. Anything else stays as built. In
+  shadow mode the job's details show the command line it would have used. New metric
+  `tentacle_cross_vendor_total`, placement reason `cross-vendor:<vendor>-<api>`.
+  Trickplay, extraction, audio analysis and HDR sources keep the same-vendor rule.
+
 ## 2.0.3
 
 - Jellyfin's installed-plugins list shows the build's full version, as the catalog does:
