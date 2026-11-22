@@ -83,6 +83,7 @@ public sealed partial class TentacleRuntime : IAsyncDisposable
             ServerUid = PeerCredentials.CurrentUid,
             SharedRoots = SharedRoots,
             HardwareTest = () => BuildHardwareTest(_configurationManager.GetEncodingOptions()),
+            ForeignHardwareTest = ForeignHardwareTest,
             Attribute = attributor.Attribute,
         };
 
@@ -121,6 +122,15 @@ public sealed partial class TentacleRuntime : IAsyncDisposable
     public bool MetricsEnabled => _configurationManager.Configuration.EnableMetrics;
 
     private static PluginConfiguration Config => Plugin.Instance?.Configuration ?? new PluginConfiguration();
+
+    // Only where the plugin rebuilds transcodes for other vendors (Jellyfin 12, setting on):
+    // otherwise such a tentacle takes the jobs that use no hardware, as before.
+    private static HardwareTest? ForeignHardwareTest(GpuInfo gpu)
+#if NET10_0_OR_GREATER
+        => Config.CrossVendor ? BuildForeignHardwareTest(gpu) : null;
+#else
+        => null;
+#endif
 
     /// <summary>
     /// Starts the broker.
@@ -300,6 +310,27 @@ public sealed partial class TentacleRuntime : IAsyncDisposable
     public static string QsvVaapiDevice(string? renderNode) => string.IsNullOrWhiteSpace(renderNode)
         ? "vaapi=va:,vendor_id=0x8086,driver=iHD,kernel_driver=i915"
         : $"vaapi=va:{renderNode},driver=iHD,kernel_driver=i915";
+
+    /// <summary>
+    /// The self-test for a tentacle's GPU of another vendor than the server's, in its
+    /// own hardware type (VAAPI on its device, or NVENC), as for a server configured
+    /// that way with hardware encoding on.
+    /// </summary>
+    /// <param name="gpu">The tentacle's GPU.</param>
+    /// <returns>The test, or null for a GPU Tentacle does not rebuild transcodes for.</returns>
+    public static HardwareTest? BuildForeignHardwareTest(GpuInfo gpu)
+    {
+        ArgumentNullException.ThrowIfNull(gpu);
+        HardwareAccelerationType? type = gpu.Api switch
+        {
+            "vaapi" => HardwareAccelerationType.vaapi,
+            "nvenc" or "cuda" => HardwareAccelerationType.nvenc,
+            _ => null,
+        };
+        return type is { } t
+            ? BuildHardwareTest(new EncodingOptions { HardwareAccelerationType = t, VaapiDevice = gpu.Device, EnableHardwareEncoding = true })
+            : null;
+    }
 
     /// <summary>
     /// The hardware self-test for the server's encoding settings: initialise the same

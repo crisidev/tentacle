@@ -123,4 +123,13 @@ public class PluginConfiguration : BasePluginConfiguration
     /// /metrics would see who watches what.
     /// </summary>
     public bool MetricsNameViewers { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether playback transcodes may go to tentacles
+    /// with another vendor's GPU than the server's (an AMD or NVIDIA tentacle of an
+    /// Intel server): Jellyfin builds the transcode again for that GPU, and only when
+    /// the result checks out. Jellyfin 12.1 and later; experimental, so off by default.
+    /// In shadow mode the dashboard shows the command lines it would have used.
+    /// </summary>
+    public bool CrossVendor { get; set; }
 }

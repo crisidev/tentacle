@@ -57,6 +57,28 @@ public class CrossVendorPlacementTests
     }
 
     [Fact]
+    public void APlainVaapiRebuildFollowsTheHostsWord()
+    {
+        // Jellyfin's VAAPI pipeline for an AMD GPU names no driver, so no vendor.
+        string[] plain = ["-init_hw_device", "vaapi=va:/dev/dri/renderD128", "-filter_hw_device", "va", "-hwaccel", "vaapi", "-i", "/data/movies/a.mkv", "-codec:v:0", "h264_vaapi", "-f", "hls", Output];
+        Assert.Null(Analyze(plain).HardwareVendor);
+
+        var intel = Node("mandalore", Gpu("intel", "qsv"), hardwareOk: true, foreignOk: false);
+        var amd = Node("coruscant", Gpu("amd", "vaapi"), hardwareOk: false, foreignOk: true);
+
+        // Rebuilt for AMD: the AMD tentacle, not the Intel one, not this server.
+        var rebuilt = Scheduler.Place(Analyze(plain), PlacementMode.Active, [intel, amd], Seat(4), "intel", rebuiltFor: "amd");
+        Assert.Same(amd, rebuilt.Node);
+        Assert.Equal("cross-vendor:amd-vaapi", rebuilt.Reason);
+        amd.Reserve(1, false);
+        amd.Reserve(1, false);
+        Assert.Null(Scheduler.Place(Analyze(plain), PlacementMode.Active, [intel, amd], Seat(4), "intel", rebuiltFor: "amd").Node);
+
+        // Not rebuilt (no word from the host): the server's own rules, as before.
+        Assert.NotSame(amd, Scheduler.Place(Analyze(plain), PlacementMode.Active, [intel, amd], null, "intel").Node);
+    }
+
+    [Fact]
     public void TheServersOwnCommandsNeverGoToAForeignGpu()
     {
         // A passed foreign test only admits command lines rebuilt for that GPU.

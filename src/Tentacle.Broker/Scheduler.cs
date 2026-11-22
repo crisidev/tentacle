@@ -97,14 +97,17 @@ public static class Scheduler
     /// <param name="nodes">The connected tentacles.</param>
     /// <param name="local">This server's seat, when it competes for jobs (slots above 0).</param>
     /// <param name="serverVendor">The GPU vendor the server's own hardware command lines are for, when known.</param>
+    /// <param name="rebuiltFor">The vendor the host rebuilt this command line for, when it did: a plain VAAPI
+    /// command line names no vendor, so the host's word decides.</param>
     /// <returns>The decision.</returns>
-    public static PlacementDecision Place(ArgvAnalysis analysis, PlacementMode mode, IReadOnlyCollection<TentacleNode> nodes, LocalSeat? local = null, string? serverVendor = null)
+    public static PlacementDecision Place(ArgvAnalysis analysis, PlacementMode mode, IReadOnlyCollection<TentacleNode> nodes, LocalSeat? local = null, string? serverVendor = null, string? rebuiltFor = null)
     {
         ArgumentNullException.ThrowIfNull(analysis);
         ArgumentNullException.ThrowIfNull(nodes);
 
         var policy = PolicyFor(analysis.Kind);
-        var foreign = IsForeignJob(analysis, serverVendor);
+        var foreign = rebuiltFor is { Length: > 0 } || IsForeignJob(analysis, serverVendor);
+        var vendor = rebuiltFor is { Length: > 0 } ? rebuiltFor : analysis.HardwareVendor;
         if (foreign)
         {
             // Rebuilt for another vendor's GPU: this server cannot run it.
@@ -148,7 +151,7 @@ public static class Scheduler
         {
             // Only tentacles of that vendor whose own self-test passed: the server's test
             // (HardwareOk) says nothing about them.
-            sharing = sharing.Where(n => n.ForeignHardwareOk && n.Gpu is { } gpu && string.Equals(gpu.Vendor, analysis.HardwareVendor, StringComparison.Ordinal)).ToArray();
+            sharing = sharing.Where(n => n.ForeignHardwareOk && n.Gpu is { } gpu && string.Equals(gpu.Vendor, vendor, StringComparison.Ordinal)).ToArray();
             if (sharing.Length == 0)
             {
                 return new PlacementDecision(null, "no-hardware-tentacle", policy);

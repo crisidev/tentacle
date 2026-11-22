@@ -215,14 +215,15 @@ public sealed partial class Broker
         // Without the fallback this server neither competes for jobs nor takes one a
         // tentacle could run: such a job waits for a tentacle, then is refused. A command
         // line rebuilt for another vendor's GPU cannot run here at all.
-        var foreign = Scheduler.IsForeignJob(analysis, serverVendor);
+        var rebuiltFor = note is { Shadow: false, Vendor.Length: > 0 } ? note.Vendor : null;
+        var foreign = rebuiltFor is not null || Scheduler.IsForeignJob(analysis, serverVendor);
         var strict = (!Options.LocalFallback && mode == PlacementMode.Active) || foreign;
         IReadOnlyCollection<TentacleNode> Eligible() => foreign && note is { Shadow: false } pinned
             ? Nodes.Nodes.Where(n => string.Equals(n.Name, pinned.Node, StringComparison.Ordinal)
                 || (n.Gpu is { } g && string.Equals(g.Vendor, pinned.Vendor, StringComparison.Ordinal) && string.Equals(g.Device, pinned.Device, StringComparison.Ordinal))).ToArray()
             : Nodes.Nodes;
         PlacementDecision Decide() => request.Protocol == ProtocolInfo.Version
-            ? Scheduler.Place(analysis, mode, Eligible(), strict ? null : Local, serverVendor)
+            ? Scheduler.Place(analysis, mode, Eligible(), strict ? null : Local, serverVendor, rebuiltFor)
             : new PlacementDecision(null, "protocol-mismatch", Scheduler.PolicyFor(analysis.Kind));
         var decision = Decide();
 
@@ -595,7 +596,7 @@ public sealed partial class Broker
         _ = AttributeAsync(analysis, record);
         Metrics.JobStarted(record.Kind, record.Node, record.Reason);
         var why = foreign
-            ? $"this transcode was rebuilt for a {analysis.HardwareVendor} GPU and no such tentacle could take it within {Options.NoFallbackWait.TotalSeconds:0} s ({record.Reason}); {Options.ServerName}'s GPU cannot run it (a new attempt is built for {Options.ServerName}'s GPU unless such a tentacle has room)"
+            ? $"this transcode was rebuilt for another vendor's GPU and no such tentacle could take it within {Options.NoFallbackWait.TotalSeconds:0} s ({record.Reason}); {Options.ServerName}'s GPU cannot run it (a new attempt is built for {Options.ServerName}'s GPU unless such a tentacle has room)"
             : $"no tentacle could take this {record.Kind.ToLowerInvariant()} job within {Options.NoFallbackWait.TotalSeconds:0} s ({record.Reason}), and {Options.ServerName} does not run jobs a tentacle could (Tentacle settings: \"This server runs jobs\")";
         try
         {

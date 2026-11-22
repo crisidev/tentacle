@@ -1,4 +1,8 @@
+using System;
 using System.Linq;
+#if NET10_0_OR_GREATER
+using Jellyfin.Plugin.Tentacle.CrossVendor;
+#endif
 using MediaBrowser.Controller;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Plugins;
@@ -19,6 +23,9 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         serviceCollection.AddSingleton<TentacleRuntime>();
         serviceCollection.AddHostedService<TentacleHostedService>();
         DecorateMediaEncoder(serviceCollection);
+#if NET10_0_OR_GREATER
+        DecorateTranscodeManager(serviceCollection);
+#endif
     }
 
     /// <summary>
@@ -39,4 +46,28 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
         services[index] = ServiceDescriptor.Singleton<IMediaEncoder>(sp =>
             new ShimMediaEncoder((IMediaEncoder)sp.GetRequiredService(implementation), sp.GetRequiredService<ShimInstaller>()));
     }
+
+#if NET10_0_OR_GREATER
+
+    /// <summary>
+    /// Wraps Jellyfin's transcode manager so a transcode may be rebuilt for a tentacle
+    /// with another vendor's GPU before it starts (Jellyfin 12.1 and later: the
+    /// EncodingHelper calls this relies on are not the same on 10.11).
+    /// </summary>
+    private static void DecorateTranscodeManager(IServiceCollection services)
+    {
+        var index = services.ToList().FindLastIndex(d => d.ServiceType == typeof(ITranscodeManager));
+        if (index < 0 || services[index] is not { Lifetime: ServiceLifetime.Singleton, ImplementationType: { } implementation })
+        {
+            // Not the registration Tentacle knows: transcodes run as Jellyfin builds them.
+            return;
+        }
+
+        services.AddSingleton<CrossVendorPlanner>();
+        services.AddSingleton(implementation);
+        services[index] = ServiceDescriptor.Singleton<ITranscodeManager>(sp => new CrossVendorTranscodeManager(
+            (ITranscodeManager)sp.GetRequiredService(implementation),
+            new Lazy<CrossVendorPlanner>(sp.GetRequiredService<CrossVendorPlanner>)));
+    }
+#endif
 }

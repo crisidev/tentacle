@@ -9,5 +9,6 @@
     <Project Path="tests/Tentacle.Protocol.Tests/Tentacle.Protocol.Tests.csproj" />
     <Project Path="tests/Tentacle.Broker.Tests/Tentacle.Broker.Tests.csproj" />
     <Project Path="tests/Tentacle.Cli.Tests/Tentacle.Cli.Tests.csproj" />
+    <Project Path="tests/Jellyfin.Plugin.Tentacle.Tests/Jellyfin.Plugin.Tentacle.Tests.csproj" />
   </Folder>
 </Solution>
