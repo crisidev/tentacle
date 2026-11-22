@@ -30,7 +30,9 @@ public sealed partial class Broker
     private static readonly TimeSpan VerifyTimeout = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan ReplyVisibility = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan[] AttributionRetries = [TimeSpan.Zero, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(10)];
+    private static readonly TimeSpan CrossVendorNoteLife = TimeSpan.FromMinutes(1);
     private readonly ConcurrentDictionary<string, PendingJob> _pending = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, CrossVendorNote> _crossVendorNotes = new(StringComparer.Ordinal);
     private readonly ILogger<Broker> _logger;
     private readonly LocalSeat _local = new();
     private long _jobCounter;
@@ -101,6 +103,50 @@ public sealed partial class Broker
     public void Retire() => _retired = true;
 
     /// <summary>
+    /// The tentacle with another vendor's GPU that should take a transcode the server
+    /// built for its own GPU, if the host rebuilds it for that tentacle: see
+    /// <see cref="Scheduler.PlaceForeign"/>. Null leaves the job as built.
+    /// </summary>
+    /// <param name="analysis">The analysis of the command line the server built.</param>
+    /// <param name="canTake">Whether the host can rebuild the job for a tentacle.</param>
+    /// <returns>The tentacle, or null.</returns>
+    public TentacleNode? PlanCrossVendor(ArgvAnalysis analysis, Func<TentacleNode, bool> canTake)
+    {
+        var mode = Options.Placement;
+        var strict = !Options.LocalFallback && mode == PlacementMode.Active;
+        return Scheduler.PlaceForeign(analysis, mode, Nodes.Nodes, strict ? null : Local, Options.HardwareTest()?.Vendor, canTake);
+    }
+
+    /// <summary>
+    /// Records that the host rebuilt (or, in shadow mode, would have rebuilt) the
+    /// transcode writing <paramref name="output"/> for a tentacle's GPU, so its
+    /// placement keeps it on that GPU and its record shows both command lines.
+    /// </summary>
+    /// <param name="output">The job's output file (the playlist or the file).</param>
+    /// <param name="node">The tentacle it was rebuilt for.</param>
+    /// <param name="original">The command line the server built (ffmpeg's arguments).</param>
+    /// <param name="rewritten">The command line rebuilt for the tentacle.</param>
+    /// <param name="shadow">Whether it only would have been (shadow mode): the original runs.</param>
+    public void NoteCrossVendor(string output, TentacleNode node, string original, string rewritten, bool shadow)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(output);
+        ArgumentNullException.ThrowIfNull(node);
+        var now = DateTimeOffset.UtcNow;
+        foreach (var stale in _crossVendorNotes.Where(n => n.Value.Expires < now).Select(n => n.Key).ToArray())
+        {
+            _crossVendorNotes.TryRemove(stale, out _);
+        }
+
+        var gpu = node.Gpu;
+        var reason = gpu is null ? "cross-vendor" : Scheduler.CrossVendorReason(gpu);
+        _crossVendorNotes[output] = new CrossVendorNote(node.Name, gpu?.Vendor ?? string.Empty, gpu?.Device ?? string.Empty, reason, original, rewritten, shadow, now + CrossVendorNoteLife);
+        Metrics.CrossVendor(node.Name, shadow ? "shadow" : "rebuilt");
+    }
+
+    private CrossVendorNote? TakeCrossVendorNote(string output)
+        => _crossVendorNotes.TryRemove(output, out var note) && note.Expires >= DateTimeOffset.UtcNow ? note : null;
+
+    /// <summary>
     /// Asks every tentacle to prove its shares and hardware again (encoding settings changed).
     /// </summary>
     public void ReverifyAll()
@@ -163,12 +209,20 @@ public sealed partial class Broker
 
         var analysis = ArgvAnalysis.Analyze(request.Binary, request.Args, request.Cwd);
         var mode = Options.Placement;
+        var serverVendor = Options.HardwareTest()?.Vendor;
+        var note = analysis.Output is { } outputPath ? TakeCrossVendorNote(outputPath) : null;
 
         // Without the fallback this server neither competes for jobs nor takes one a
-        // tentacle could run: such a job waits for a tentacle, then is refused.
-        var strict = !Options.LocalFallback && mode == PlacementMode.Active;
+        // tentacle could run: such a job waits for a tentacle, then is refused. A command
+        // line rebuilt for another vendor's GPU cannot run here at all.
+        var foreign = Scheduler.IsForeignJob(analysis, serverVendor);
+        var strict = (!Options.LocalFallback && mode == PlacementMode.Active) || foreign;
+        IReadOnlyCollection<TentacleNode> Eligible() => foreign && note is { Shadow: false } pinned
+            ? Nodes.Nodes.Where(n => string.Equals(n.Name, pinned.Node, StringComparison.Ordinal)
+                || (n.Gpu is { } g && string.Equals(g.Vendor, pinned.Vendor, StringComparison.Ordinal) && string.Equals(g.Device, pinned.Device, StringComparison.Ordinal))).ToArray()
+            : Nodes.Nodes;
         PlacementDecision Decide() => request.Protocol == ProtocolInfo.Version
-            ? Scheduler.Place(analysis, mode, Nodes.Nodes, strict ? null : Local)
+            ? Scheduler.Place(analysis, mode, Eligible(), strict ? null : Local, serverVendor)
             : new PlacementDecision(null, "protocol-mismatch", Scheduler.PolicyFor(analysis.Kind));
         var decision = Decide();
 
@@ -181,6 +235,17 @@ public sealed partial class Broker
             WouldRunOn = decision.WouldRunOn,
             Command = Shorten(request),
         };
+        if (note is { Shadow: true } && mode == PlacementMode.DryRun)
+        {
+            // The host would have rebuilt it for this tentacle's GPU: show that instead.
+            decision = decision with { Reason = "dry-run:" + note.Reason, WouldRunOn = note.Node };
+            record.WouldRunOn = note.Node;
+            record.RewrittenCommand = Shorten(note.Rewritten);
+        }
+        else if (note is { Shadow: false } && foreign)
+        {
+            record.OriginalCommand = Shorten(note.Original);
+        }
 
         var nice = decision.Policy.Background ? Options.BackgroundNice : 0;
         var waitUntil = DateTimeOffset.UtcNow + Options.NoFallbackWait;
@@ -216,7 +281,7 @@ public sealed partial class Broker
         record.Reason = decision.Reason;
         if (strict && lease is null && decision.Policy.Remote && Scheduler.IsCapacity(decision.Reason))
         {
-            await RefuseAsync(output, analysis, record, cancellationToken).ConfigureAwait(false);
+            await RefuseAsync(output, analysis, record, foreign, cancellationToken).ConfigureAwait(false);
             return;
         }
 
@@ -417,11 +482,9 @@ public sealed partial class Broker
     private static bool FixedEquals(string a, string b)
         => CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(a), Encoding.UTF8.GetBytes(b));
 
-    private static string Shorten(StartRequest request)
-    {
-        var line = request.Binary + " " + string.Join(' ', request.Args);
-        return line.Length <= 2000 ? line : string.Concat(line.AsSpan(0, 2000), "…");
-    }
+    private static string Shorten(StartRequest request) => Shorten(request.Binary + " " + string.Join(' ', request.Args));
+
+    private static string Shorten(string line) => line.Length <= 2000 ? line : string.Concat(line.AsSpan(0, 2000), "…");
 
     private static string RandomHex(int bytes) => Convert.ToHexString(RandomNumberGenerator.GetBytes(bytes)).ToLowerInvariant();
 
@@ -523,7 +586,7 @@ public sealed partial class Broker
     /// Tells the shim not to run a job: no tentacle took it in time and this server
     /// does not fall back. ffmpeg then fails as if it had, with the reason on stderr.
     /// </summary>
-    private async Task RefuseAsync(Stream output, ArgvAnalysis analysis, JobRecord record, CancellationToken cancellationToken)
+    private async Task RefuseAsync(Stream output, ArgvAnalysis analysis, JobRecord record, bool foreign, CancellationToken cancellationToken)
     {
         record.Node = Scheduler.RefusedName;
         record.Outcome = "refused";
@@ -531,7 +594,9 @@ public sealed partial class Broker
         History.Add(record);
         _ = AttributeAsync(analysis, record);
         Metrics.JobStarted(record.Kind, record.Node, record.Reason);
-        var why = $"no tentacle could take this {record.Kind.ToLowerInvariant()} job within {Options.NoFallbackWait.TotalSeconds:0} s ({record.Reason}), and {Options.ServerName} does not run jobs a tentacle could (Tentacle settings: \"This server runs jobs\")";
+        var why = foreign
+            ? $"this transcode was rebuilt for a {analysis.HardwareVendor} GPU and no such tentacle could take it within {Options.NoFallbackWait.TotalSeconds:0} s ({record.Reason}); {Options.ServerName}'s GPU cannot run it (a new attempt is built for {Options.ServerName}'s GPU unless such a tentacle has room)"
+            : $"no tentacle could take this {record.Kind.ToLowerInvariant()} job within {Options.NoFallbackWait.TotalSeconds:0} s ({record.Reason}), and {Options.ServerName} does not run jobs a tentacle could (Tentacle settings: \"This server runs jobs\")";
         try
         {
             var placement = new Placement { Remote = false, JobId = record.Id, Node = record.Node, Reason = record.Reason, Refused = why };
@@ -867,6 +932,22 @@ public sealed partial class Broker
     }
 
     /// <summary>
+    /// Whether a GPU is of another vendor than the one the server's hardware command
+    /// lines are for, and has a hardware API of its own to rebuild them for.
+    /// </summary>
+    /// <param name="gpu">The tentacle's GPU.</param>
+    /// <param name="hardware">The server's hardware test.</param>
+    /// <returns>True for a foreign GPU.</returns>
+    public static bool IsForeign(GpuInfo gpu, HardwareTest? hardware)
+    {
+        ArgumentNullException.ThrowIfNull(gpu);
+        return hardware?.Vendor is { } vendor
+            && !string.IsNullOrEmpty(gpu.Vendor)
+            && !string.Equals(gpu.Vendor, vendor, StringComparison.Ordinal)
+            && !string.Equals(gpu.Api, Hardware.NoApi, StringComparison.Ordinal);
+    }
+
+    /// <summary>
     /// Proves what a tentacle shares and whether its hardware works. Writable roots
     /// get a round-trip: the broker writes a nonce, the agent reads it and writes it
     /// back, the broker reads that. Read-only roots (libraries) get a stat of a file
@@ -930,11 +1011,15 @@ public sealed partial class Broker
 
             var hardware = Options.HardwareTest();
             var skipHardware = hardware is null ? null : WhyNoHardwareTest(node, hardware);
+
+            // A GPU of another vendor cannot run the server's command lines, but it can
+            // run ones rebuilt for it: test its own hardware type instead.
+            var foreign = skipHardware is not null && node.Gpu is { } gpu && IsForeign(gpu, hardware) ? Options.ForeignHardwareTest(gpu) : null;
             var request = new VerifyRequest
             {
                 Roots = probes.ToArray(),
-                HardwareTestArgs = skipHardware is null ? hardware?.Args ?? [] : [],
-                HardwareType = hardware?.Type ?? "none",
+                HardwareTestArgs = foreign?.Args ?? (skipHardware is null ? hardware?.Args ?? [] : []),
+                HardwareType = foreign?.Type ?? hardware?.Type ?? "none",
             };
             var pending = new TaskCompletionSource<VerifyResult>(TaskCreationOptions.RunContinuationsAsynchronously);
             node.PendingVerify = pending;
@@ -973,10 +1058,17 @@ public sealed partial class Broker
             }
 
             var hardwareOk = false;
+            var foreignOk = false;
             if (hardware is not null && skipHardware is not null)
             {
                 // Not a fault: this tentacle runs everything that uses no hardware.
                 checks.Add(new NodeCheck($"hardware:{hardware.Type}", false, skipHardware, Required: false));
+                if (foreign is not null)
+                {
+                    foreignOk = result.HardwareTested && result.HardwareOk;
+                    var detail = foreignOk ? "self-test passed: takes transcodes rebuilt for this GPU" : result.HardwareDetail;
+                    checks.Add(new NodeCheck($"hardware:{foreign.Type}", foreignOk, detail, Required: false));
+                }
             }
             else if (hardware is not null)
             {
@@ -984,7 +1076,7 @@ public sealed partial class Broker
                 checks.Add(new NodeCheck($"hardware:{hardware.Type}", hardwareOk, hardwareOk ? "self-test passed" : result.HardwareDetail));
             }
 
-            node.ApplyVerification(checks, verified, hardwareOk, incompatible);
+            node.ApplyVerification(checks, verified, hardwareOk, incompatible, foreignOk);
             var failed = checks.Where(c => !c.Ok).Select(c => $"{c.Name}{(c.Required ? string.Empty : " [optional]")} ({c.Detail})").ToArray();
             LogVerified(node.Name, node.State, verified.Count, probes.Count, failed.Length == 0 ? "all checks passed" : string.Join("; ", failed));
         }

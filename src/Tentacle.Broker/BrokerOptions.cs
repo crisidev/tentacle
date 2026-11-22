@@ -198,6 +198,14 @@ public sealed class BrokerOptions
     public Func<HardwareTest?> HardwareTest { get; set; } = () => null;
 
     /// <summary>
+    /// Gets or sets the self-test for a tentacle whose GPU is of another vendor than
+    /// the server's, built for that GPU's own hardware type; null when the host does
+    /// not rebuild command lines for other vendors (cross-vendor transcoding off), and
+    /// such a tentacle then takes only the jobs that use no hardware.
+    /// </summary>
+    public Func<GpuInfo, HardwareTest?> ForeignHardwareTest { get; set; } = _ => null;
+
+    /// <summary>
     /// Gets or sets how to find out who and what a job is for (the host's sessions
     /// and library); null when it does not know yet. Called when the job starts and
     /// retried briefly while it runs.
