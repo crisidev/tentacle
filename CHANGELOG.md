@@ -3,6 +3,14 @@
 Every artifact (the plugin, the `tentacle` binary and the worker mod image) shares one
 version. The plugin's own changelog in `build.yaml` carries the latest entry.
 
+## 2.0.2
+
+- The plugin is installed with automatic updates on: Jellyfin's **Update Plugins**
+  scheduled task installs new releases, which take effect after Jellyfin restarts.
+  Until now every install carried `autoUpdate: false` in its `meta.json`, so the task
+  skipped Tentacle and each update was a manual install. Moving to 2.0.2 is the last
+  manual one (Dashboard → Plugins, Tentacle, version 2.0.2).
+
 ## 2.0.1
 
 - Fix: after Jellyfin's own restart (Dashboard → Restart, or a plugin update), the

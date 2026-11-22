@@ -29,7 +29,7 @@ Every release ships, from the same build:
 * **`crisidev/tentacle:worker-<version>`**, a [LinuxServer docker mod](https://github.com/linuxserver/docker-mods)
   on Docker Hub, for each tentacle: the Jellyfin image runs the Tentacle agent instead
   of Jellyfin. Pin the digest from the [release notes](https://github.com/crisidev/tentacle/releases)
-  (`crisidev/tentacle:worker-2.0.1@sha256:...`): a tag can be overwritten, a digest
+  (`crisidev/tentacle:worker-2.0.2@sha256:...`): a tag can be overwritten, a digest
   cannot. `:worker-main` follows the main branch.
 
 Keep the plugin and the worker mod on the same version.
@@ -112,7 +112,7 @@ ffmpeg, and `ffprobe` stays Jellyfin's.
        environment:
          PUID: "1000"                                    # same uid as the server
          PGID: "1000"
-         DOCKER_MODS: crisidev/tentacle:worker-2.0.1
+         DOCKER_MODS: crisidev/tentacle:worker-2.0.2
          TENTACLE_BROKER_URL: wss://jellyfin.lan:8097
          TENTACLE_BROKER_FINGERPRINT: "AB:CD:...:EF"     # from the dashboard
          TENTACLE_TOKEN_FILE: /run/secrets/tentacle-token
@@ -164,6 +164,18 @@ A new install starts with **Where jobs run: Shadow**. Every job runs on the serv
 before, and the dashboard and metrics record where it *would* have gone (`would_run_on`
 in the log line). Switch to **Active** when that looks right. **Off** runs
 everything on the server.
+
+## Updating
+
+From 2.0.2 the plugin updates itself: Jellyfin's **Update Plugins** scheduled task
+installs new releases, and they take effect after Jellyfin's next restart. Versions
+before 2.0.2 were installed with automatic updates off, so the move to 2.0.2 is a manual
+install from the catalog (Dashboard → Plugins, Tentacle, version 2.0.2).
+
+An updated plugin does not update the tentacles: move their
+`crisidev/tentacle:worker-<version>` along with it. Until then, versions that speak the
+same protocol work together, and the broker refuses an agent that speaks another one,
+logging why.
 
 ## Uninstalling
 

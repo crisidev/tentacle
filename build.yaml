@@ -5,7 +5,7 @@
 # The full history is in CHANGELOG.md; scripts/release.sh reads the release notes from it.
 name: "Tentacle"
 guid: "3a65d525-990c-4f73-89e9-a0d1500a53d2"
-version: "2.0.1.1"
+version: "2.0.2.1"
 # The 12 build; scripts/build.sh also builds net9.0 for targetAbi 10.11.0.0.
 targetAbi: "12.1.0.0"
 framework: "net10.0"
@@ -24,6 +24,6 @@ artifacts:
   - "tentacle-amd64"
   - "tentacle-arm64"
 changelog: >
-  2.0.1: The dashboard's restart button no longer leaves the metrics stuck at
-  "broker down, every tentacle disconnected" (Jellyfin restarts in-process and
-  the old broker kept reporting). See CHANGELOG.md for the history.
+  2.0.2: The plugin now updates itself through Jellyfin's Update Plugins task
+  (earlier versions were installed with automatic updates off). This update is
+  the last manual one. See CHANGELOG.md for the history.

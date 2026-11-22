@@ -74,6 +74,10 @@ do_plugin() {
         for arch in amd64 arm64; do
             install -m 0755 "$(cli_dir "${arch}")/tentacle" "${out}/tentacle-${arch}"
         done
+        # Jellyfin keeps this meta.json as the installed plugin's manifest, so
+        # autoUpdate here decides whether its "Update Plugins" task picks up new
+        # releases (it was false until 2.0.2: every update was a manual install).
+        # An update still takes effect only after Jellyfin restarts.
         cat > "${out}/meta.json" <<JSON
 {
   "category": "General",
@@ -87,7 +91,7 @@ do_plugin() {
   "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "version": "${version}.${revision}",
   "status": "Active",
-  "autoUpdate": false,
+  "autoUpdate": true,
   "assemblies": [$(printf '"%s",' "${assemblies[@]}" | sed 's/,$//')]
 }
 JSON
