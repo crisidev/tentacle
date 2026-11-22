@@ -5,13 +5,16 @@ version. The plugin's own changelog in `build.yaml` carries the latest entry.
 
 ## Unreleased
 
-- Experimental, Jellyfin 12.1+, off by default: **cross-vendor transcoding**. A tentacle
+- Experimental, Jellyfin 12.1+, Off by default: **cross-vendor transcoding**, with its
+  own Off / Shadow / Active setting that never goes further than "Where jobs run" (the
+  lesser of the two applies, and the dashboard says which one limits it). In Shadow the
+  rebuilt command line is recorded while the job runs as Jellyfin built it, placed by
+  the usual rules, even when jobs otherwise run for real. A tentacle
   whose GPU is another vendor's than the server's (AMD or NVIDIA for an Intel server) is
   tested with its own hardware type (VAAPI, NVENC), and playback transcodes of SDR
   sources may go there: the plugin rebuilds the transcode with Jellyfin's own
   `EncodingHelper` for that GPU, and only when every GPU-dependent part of the command
-  line Jellyfin built is found exactly as expected. Anything else stays as built. In
-  shadow mode the job's details show the command line it would have used. New metric
+  line Jellyfin built is found exactly as expected. Anything else stays as built. New metric
   `tentacle_cross_vendor_total`, placement reason `cross-vendor:<vendor>-<api>`.
   Trickplay, extraction, audio analysis and HDR sources keep the same-vendor rule.
   A tentacle's GPU facts are untrusted input there: malformed ones are dropped (the

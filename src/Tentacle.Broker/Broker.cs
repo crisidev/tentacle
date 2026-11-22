@@ -97,6 +97,12 @@ public sealed partial class Broker
     public JobHistory History { get; } = new();
 
     /// <summary>
+    /// Gets how far cross-vendor transcoding goes right now: its own setting, but never
+    /// further than where jobs run overall.
+    /// </summary>
+    public PlacementMode CrossVendorMode => EffectiveCrossVendor(Options.Placement, Options.CrossVendor);
+
+    /// <summary>
     /// Stops this broker from refreshing the shared metrics, for good. Call it when the
     /// broker is shut down; a broker created after it then owns the gauges.
     /// </summary>
@@ -112,10 +118,20 @@ public sealed partial class Broker
     /// <returns>The tentacle, or null.</returns>
     public TentacleNode? PlanCrossVendor(ArgvAnalysis analysis, Func<TentacleNode, bool> canTake)
     {
-        var mode = Options.Placement;
-        var strict = !Options.LocalFallback && mode == PlacementMode.Active;
-        return Scheduler.PlaceForeign(analysis, mode, Nodes.Nodes, strict ? null : Local, Options.HardwareTest()?.Vendor, canTake);
+        var strict = !Options.LocalFallback && Options.Placement == PlacementMode.Active;
+        return Scheduler.PlaceForeign(analysis, CrossVendorMode, Nodes.Nodes, strict ? null : Local, Options.HardwareTest()?.Vendor, canTake);
     }
+
+    /// <summary>
+    /// Cross-vendor transcoding's effective mode: the lesser of where jobs run overall and
+    /// its own setting (off &lt; shadow &lt; active). Shadow overall makes it shadow at
+    /// most; off overall turns it off.
+    /// </summary>
+    /// <param name="placement">Where jobs run overall.</param>
+    /// <param name="crossVendor">Cross-vendor transcoding's own setting.</param>
+    /// <returns>The effective mode.</returns>
+    public static PlacementMode EffectiveCrossVendor(PlacementMode placement, PlacementMode crossVendor)
+        => (PlacementMode)Math.Min((int)placement, (int)crossVendor);
 
     /// <summary>
     /// Records that the host rebuilt (or, in shadow mode, would have rebuilt) the
@@ -133,6 +149,15 @@ public sealed partial class Broker
         ArgumentNullException.ThrowIfNull(rewrittenArgv);
         ArgumentException.ThrowIfNullOrEmpty(output);
         ArgumentNullException.ThrowIfNull(node);
+        var mode = CrossVendorMode;
+        if (mode == PlacementMode.Disabled)
+        {
+            // Off (its own setting, or everything off): nothing is rebuilt or recorded.
+            return;
+        }
+
+        // Only active cross-vendor transcoding runs a rebuilt command line.
+        shadow |= mode != PlacementMode.Active;
         var now = DateTimeOffset.UtcNow;
         foreach (var stale in _crossVendorNotes.Where(n => n.Value.Expires < now).Select(n => n.Key).ToArray())
         {
@@ -255,6 +280,14 @@ public sealed partial class Broker
             decision = decision with { Reason = "dry-run:" + note.Reason, WouldRunOn = note.Node };
             record.WouldRunOn = note.Node;
             record.RewrittenCommand = Shorten(note.Rewritten);
+            record.RewrittenFor = note.Node;
+        }
+        else if (note is { Shadow: true })
+        {
+            // Cross-vendor in shadow while jobs run for real: this one runs as built, where
+            // the usual rules put it, and its record shows what it would have been.
+            record.RewrittenCommand = Shorten(note.Rewritten);
+            record.RewrittenFor = note.Node;
         }
         else if (note is { Shadow: false } && foreign)
         {

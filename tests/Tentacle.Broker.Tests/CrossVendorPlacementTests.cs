@@ -173,6 +173,7 @@ public class CrossVendorPlacementTests
         var options = new BrokerOptions
         {
             Placement = PlacementMode.DryRun,
+            CrossVendor = PlacementMode.Active,
             SharedRoots = () => [],
             ServerFfmpegVersion = () => "8.1.3",
             HardwareTest = () => new HardwareTest("qsv", ["-x"], "intel"),
@@ -197,6 +198,7 @@ public class CrossVendorPlacementTests
         var options = new BrokerOptions
         {
             Placement = PlacementMode.Active,
+            CrossVendor = PlacementMode.Active,
             SharedRoots = () => [],
             ServerFfmpegVersion = () => "8.1.3",
             HardwareTest = () => new HardwareTest("qsv", ["-x"], "intel"),
@@ -217,6 +219,7 @@ public class CrossVendorPlacementTests
         var options = new BrokerOptions
         {
             Placement = PlacementMode.Active,
+            CrossVendor = PlacementMode.Active,
             SharedRoots = () => [],
             ServerFfmpegVersion = () => "8.1.3",
             HardwareTest = () => new HardwareTest("qsv", ["-x"], "intel"),
@@ -242,6 +245,7 @@ public class CrossVendorPlacementTests
         var options = new BrokerOptions
         {
             Placement = PlacementMode.Active,
+            CrossVendor = PlacementMode.Active,
             SharedRoots = () => [],
             ServerFfmpegVersion = () => "8.1.3",
             HardwareTest = () => new HardwareTest("qsv", ["-x"], "intel"),
@@ -275,6 +279,100 @@ public class CrossVendorPlacementTests
         honest.Gpu.Driver = "amdgpu";
         Assert.Null(Broker.DropUntrustedGpu(honest));
         Assert.NotNull(honest.Gpu);
+    }
+
+    private static Broker BrokerWith(PlacementMode placement, PlacementMode crossVendor) => new(
+        new BrokerOptions
+        {
+            Placement = placement,
+            CrossVendor = crossVendor,
+            SharedRoots = () => [],
+            ServerFfmpegVersion = () => "8.1.3",
+            HardwareTest = () => new HardwareTest("qsv", ["-x"], "intel"),
+        },
+        NullLogger<Broker>.Instance);
+
+    private static async Task<string> ScrapeAsync(Broker broker)
+    {
+        using var stream = new MemoryStream();
+        await broker.Metrics.Registry.CollectAndExportAsTextAsync(stream, CancellationToken.None);
+        return System.Text.Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    [Theory]
+    [InlineData(PlacementMode.Active, PlacementMode.Active, PlacementMode.Active)]
+    [InlineData(PlacementMode.Active, PlacementMode.DryRun, PlacementMode.DryRun)]
+    [InlineData(PlacementMode.Active, PlacementMode.Disabled, PlacementMode.Disabled)]
+    [InlineData(PlacementMode.DryRun, PlacementMode.Active, PlacementMode.DryRun)]
+    [InlineData(PlacementMode.DryRun, PlacementMode.DryRun, PlacementMode.DryRun)]
+    [InlineData(PlacementMode.Disabled, PlacementMode.Active, PlacementMode.Disabled)]
+    [InlineData(PlacementMode.Disabled, PlacementMode.DryRun, PlacementMode.Disabled)]
+    public void CrossVendorNeverGoesFurtherThanWhereJobsRun(PlacementMode overall, PlacementMode own, PlacementMode effective)
+    {
+        Assert.Equal(effective, Broker.EffectiveCrossVendor(overall, own));
+        Assert.Equal(effective, BrokerWith(overall, own).CrossVendorMode);
+    }
+
+    [Fact]
+    public async Task ShadowWhileJobsRunForRealRunsTheJobAsBuiltAndRecordsTheRebuild()
+    {
+        var broker = BrokerWith(PlacementMode.Active, crossVendor: PlacementMode.DryRun);
+        var amd = Node("coruscant", Gpu("amd", "vaapi"), hardwareOk: false, foreignOk: true);
+
+        // Even a note that asks to run the rebuild is only recorded in shadow.
+        broker.NoteCrossVendor(Output, amd, "ffmpeg " + string.Join(' ', QsvArgs), "ffmpeg " + string.Join(' ', AmdArgs), AmdArgs, shadow: false);
+        var replies = await RunShimAsync(broker, QsvArgs);
+
+        // Jellyfin's own command line, placed by the usual rules (here: no tentacle, so here).
+        var usual = Scheduler.Place(Analyze(QsvArgs), PlacementMode.Active, [], broker.Local, "intel");
+        var record = Assert.Single(broker.History.Snapshot());
+        Assert.Contains("h264_qsv", record.Command, StringComparison.Ordinal);
+        Assert.Equal(usual.Reason, record.Reason);
+        Assert.Equal("local", record.Node);
+        Assert.Null(record.WouldRunOn);
+        Assert.DoesNotContain(replies, f => f.Type == FrameType.Placement && f.Read(ProtocolJson.Default.Placement).Refused.Length > 0);
+
+        // And what it would have been.
+        Assert.Contains("h264_vaapi", record.RewrittenCommand, StringComparison.Ordinal);
+        Assert.Equal("coruscant", record.RewrittenFor);
+        Assert.Contains("tentacle_cross_vendor_total{node=\"coruscant\",outcome=\"shadow\"} 1", await ScrapeAsync(broker), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ActiveWhileJobsAreInShadowIsShadow()
+    {
+        var broker = BrokerWith(PlacementMode.DryRun, crossVendor: PlacementMode.Active);
+        var amd = Node("coruscant", Gpu("amd", "vaapi"), hardwareOk: false, foreignOk: true);
+        Assert.Same(amd, Scheduler.PlaceForeign(Analyze(QsvArgs), broker.CrossVendorMode, [amd], null, "intel", _ => true));
+
+        broker.NoteCrossVendor(Output, amd, "ffmpeg " + string.Join(' ', QsvArgs), "ffmpeg " + string.Join(' ', AmdArgs), AmdArgs, shadow: false);
+        await RunShimAsync(broker, QsvArgs);
+
+        var record = Assert.Single(broker.History.Snapshot());
+        Assert.Equal("local", record.Node);
+        Assert.Equal("dry-run:cross-vendor:amd-vaapi", record.Reason);
+        Assert.Equal("coruscant", record.WouldRunOn);
+        Assert.Contains("h264_vaapi", record.RewrittenCommand, StringComparison.Ordinal);
+        Assert.Contains("outcome=\"shadow\"} 1", await ScrapeAsync(broker), StringComparison.Ordinal);
+        Assert.DoesNotContain("outcome=\"rebuilt\"", await ScrapeAsync(broker), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task OffRecordsNothing()
+    {
+        var broker = BrokerWith(PlacementMode.Active, crossVendor: PlacementMode.Disabled);
+        var amd = Node("coruscant", Gpu("amd", "vaapi"), hardwareOk: false, foreignOk: true);
+        broker.Nodes.Add(amd);
+
+        Assert.Null(broker.PlanCrossVendor(Analyze(QsvArgs), _ => true));
+        broker.NoteCrossVendor(Output, amd, "ffmpeg " + string.Join(' ', QsvArgs), "ffmpeg " + string.Join(' ', AmdArgs), AmdArgs, shadow: true);
+        await RunShimAsync(broker, QsvArgs);
+
+        var record = Assert.Single(broker.History.Snapshot());
+        Assert.Null(record.RewrittenCommand);
+        Assert.Null(record.RewrittenFor);
+        Assert.Null(record.OriginalCommand);
+        Assert.DoesNotContain("tentacle_cross_vendor_total{", await ScrapeAsync(broker), StringComparison.Ordinal);
     }
 
     private static async Task<Frame[]> RunShimAsync(Broker broker, string[] args)

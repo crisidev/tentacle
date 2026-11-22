@@ -52,12 +52,12 @@ public sealed partial class CrossVendorPlanner
     public string? Plan(StreamState state, string outputPath, string original, TranscodingJobType type)
     {
         ArgumentNullException.ThrowIfNull(state);
-        if (Plugin.Instance?.Configuration is not { CrossVendor: true } || type is not (TranscodingJobType.Hls or TranscodingJobType.Progressive) || state.VideoStream is null)
+        var broker = _runtime.Broker;
+        if (broker.CrossVendorMode == PlacementMode.Disabled || type is not (TranscodingJobType.Hls or TranscodingJobType.Progressive) || state.VideoStream is null)
         {
             return null;
         }
 
-        var broker = _runtime.Broker;
         var analysis = ArgvAnalysis.Analyze("ffmpeg", ProcessArguments.Split(original), "/");
         var codec = state.ActualOutputVideoCodec;
         var node = broker.PlanCrossVendor(analysis, n => n.Gpu is { } gpu && WorkerEncodingOptions.TypeOf(gpu) is not null && WorkerEncodingOptions.CanEncode(gpu, codec));
@@ -90,7 +90,8 @@ public sealed partial class CrossVendorPlanner
             return null;
         }
 
-        var shadow = broker.Options.Placement == PlacementMode.DryRun;
+        // Shadow: its own setting, or where jobs run overall (it never goes further).
+        var shadow = broker.CrossVendorMode != PlacementMode.Active;
         broker.NoteCrossVendor(outputPath, node, "ffmpeg " + original, "ffmpeg " + rebuilt, ProcessArguments.Split(rebuilt), shadow);
         LogRebuilt(node.Name, Scheduler.CrossVendorReason(target), shadow ? "would run there (shadow mode)" : "runs there");
         return shadow ? null : rebuilt;

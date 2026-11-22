@@ -14,7 +14,7 @@ check, or after a restart).
 | This server runs jobs | As a backup | **As a backup**: only what no tentacle can take. **As a worker**: competes with the tentacles by load, with its own slots and weight. **Never when a tentacle could**: a job no tentacle can take waits up to 10 s for one, then fails. |
 | Refuse tentacles whose ffmpeg patch version differs | off | A different major.minor is always refused; a different patch only degrades the tentacle unless this is on. |
 | Name viewers in metrics | off | Adds user, app and item labels to `tentacle_running_job_start_time_seconds`. Anyone who can read `/metrics` would see who watches what. |
-| Transcode on tentacles with another vendor's GPU | off | Experimental, Jellyfin 12.1+. Tentacles with an AMD or NVIDIA GPU of an Intel server are tested with their own hardware (VAAPI, NVENC), and playback transcodes of SDR sources may go there, rebuilt for that GPU. See [GPUs](#gpus). |
+| Transcodes on tentacles with another vendor's GPU | Off | Experimental, Jellyfin 12.1+. **Off**, **Shadow** (rebuilt command lines are recorded; jobs run as Jellyfin built them, placed as usual) or **Active** (rebuilt transcodes run on those tentacles). It never goes further than "Where jobs run": Shadow there makes it Shadow at most, Off there turns it off; the dashboard says which one limits it. Tentacles with an AMD or NVIDIA GPU of an Intel server are tested with their own hardware (VAAPI, NVENC) unless it is Off. See [GPUs](#gpus). |
 | Also shared | | Extra directories ffmpeg uses that Tentacle cannot derive from Jellyfin's settings (fonts, for example). |
 | Encryption | Self-signed | TLS with a self-signed certificate, TLS with your certificate files, or none. |
 | Port tentacles connect to | 8097 | |
@@ -129,16 +129,20 @@ Because Jellyfin builds each command line for its own hardware type:
 * a hardware job only goes to a tentacle that passed the self-test and whose GPU is the
   vendor the command line names (`h264_qsv`, `driver=iHD`, `cuda`...).
 
-With **Transcode on tentacles with another vendor's GPU** on (Jellyfin 12.1+), a
-tentacle whose GPU is another vendor's (AMD or NVIDIA for an Intel server) gets a
-self-test of its own hardware type instead (`hardware:vaapi` or `hardware:nvenc` on the
+With **Transcodes on tentacles with another vendor's GPU** set to Shadow or Active
+(Jellyfin 12.1+), a tentacle whose GPU is another vendor's (AMD or NVIDIA for an Intel
+server) gets a self-test of its own hardware type instead (`hardware:vaapi` or `hardware:nvenc` on the
 dashboard, optional). When it passed, a playback transcode may go there: if that
 tentacle beats where the job would go anyway on load, encodes the output codec in
 hardware, and the source is SDR, Jellyfin builds the transcode again for its GPU with
 its measured codecs. The rebuilt job only runs on that tentacle (or one with the same
 vendor and device); if none can take it, it is refused rather than run here, since
-this server's GPU cannot. In shadow mode the job's details show the command line it
-would have used. Trickplay, extraction and audio analysis keep the rules above.
+this server's GPU cannot. That is Active. In Shadow, the same decision is made and the
+rebuilt command line recorded (the job's details, `tentacle_cross_vendor_total{outcome="shadow"}`),
+but the job runs exactly as Jellyfin built it, placed by the usual rules, even while
+"Where jobs run" is Active: a safe way to check rebuilt command lines against real
+hardware first. The effective mode is the lesser of the two settings. Trickplay,
+extraction and audio analysis keep the rules above.
 
 `TENTACLE_MAX_JOBS=0` makes a detect-only tentacle: a cheap way to see what a machine's
 GPU can do, from the dashboard, without giving it any work.

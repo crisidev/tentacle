@@ -55,6 +55,11 @@ public sealed class JobRecord
     /// </summary>
     public string? RewrittenCommand { get; set; }
 
+    /// <summary>
+    /// Gets or sets the tentacle <see cref="RewrittenCommand"/> was rebuilt for.
+    /// </summary>
+    public string? RewrittenFor { get; set; }
+
     /// <summary>Gets or sets the Jellyfin user the job serves (playback only).</summary>
     public string? User { get; set; }
 
@@ -122,6 +127,7 @@ public sealed class JobHistory
                 Command = j.Command,
                 OriginalCommand = j.OriginalCommand,
                 RewrittenCommand = j.RewrittenCommand,
+                RewrittenFor = j.RewrittenFor,
                 User = j.User,
                 Client = j.Client,
                 Item = j.Item,

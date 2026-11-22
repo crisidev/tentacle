@@ -12,8 +12,9 @@
   * `all-busy`, `background-slots-full`: raise `TENTACLE_MAX_JOBS` /
     `TENTACLE_MAX_BACKGROUND_JOBS`, or add tentacles.
   * `cross-vendor:<vendor>-<api>`: rebuilt for a tentacle with another vendor's GPU
-    (experimental setting). The job's details show the command line Jellyfin built and
-    the one that ran. `tentacle_cross_vendor_total{outcome=~"skipped:.*"}` says why a
+    (experimental setting, Active). The job's details show the command line Jellyfin
+    built and the one that ran. In Shadow the job keeps its usual reason, and its
+    details show the command line it would have been rebuilt to. `tentacle_cross_vendor_total{outcome=~"skipped:.*"}` says why a
     transcode was not rebuilt; `no-match` after a Jellyfin upgrade means Jellyfin
     changed how it writes the command line, and the job simply stays as built.
   * `cross-vendor-mismatch`: refused. A shim's command line for a rebuilt transcode was

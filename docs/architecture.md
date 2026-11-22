@@ -261,8 +261,9 @@ oneshot that creates `/run/tentacle` (the agent's status file) for `abc`, and a
 Jellyfin builds each ffmpeg command line for one hardware acceleration type, so a QSV
 command line cannot run on an NVIDIA GPU. A hardware job goes to a tentacle with the
 server's GPU vendor; tentacles with other GPUs (or none) take everything that uses no
-hardware. With the **Transcode on tentacles with another vendor's GPU** setting
-(experimental, Jellyfin 12.1+), playback transcodes can also go to an AMD (VAAPI) or
+hardware. With the **Transcodes on tentacles with another vendor's GPU** setting
+(experimental, Jellyfin 12.1+; Off, Shadow or Active, never further than "Where jobs
+run"), playback transcodes can also go to an AMD (VAAPI) or
 NVIDIA (NVENC) tentacle of an Intel server, because Jellyfin builds them again for it:
 
 1. **Verification.** A tentacle whose GPU is another vendor's gets a self-test of its
@@ -292,8 +293,9 @@ NVIDIA (NVENC) tentacle of an Intel server, because Jellyfin builds them again f
 5. **Placement.** The plugin leaves the broker a note keyed by the output path. The
    rebuilt job only goes to that tentacle (or one with the same vendor and device),
    placement reason `cross-vendor:<vendor>-<api>`; with no room it is refused rather
-   than run on this server, whose GPU cannot. In shadow mode the original runs and the
-   job record carries the rebuilt command line.
+   than run on this server, whose GPU cannot. In shadow (its own setting, or "Where jobs
+   run") the original runs, placed by the usual rules, and the job record carries the
+   rebuilt command line (`RewrittenCommand`, `RewrittenFor`).
 
 Not covered yet: trickplay, subtitle and attachment extraction and audio analysis
 (Jellyfin builds those inside `MediaEncoder`, a different hook), HDR sources, Jellyfin

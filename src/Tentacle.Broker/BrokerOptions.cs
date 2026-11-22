@@ -206,6 +206,13 @@ public sealed class BrokerOptions
     public Func<GpuInfo, HardwareTest?> ForeignHardwareTest { get; set; } = _ => null;
 
     /// <summary>
+    /// Gets or sets how far cross-vendor transcoding goes, on its own: off, shadow
+    /// (rebuilt command lines are recorded, jobs run as built), or active. It never goes
+    /// further than <see cref="Placement"/>: see <see cref="Broker.EffectiveCrossVendor"/>.
+    /// </summary>
+    public PlacementMode CrossVendor { get; set; } = PlacementMode.Disabled;
+
+    /// <summary>
     /// Gets or sets how to find out who and what a job is for (the host's sessions
     /// and library); null when it does not know yet. Called when the job starts and
     /// retried briefly while it runs.

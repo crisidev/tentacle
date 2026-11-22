@@ -84,6 +84,7 @@ public sealed partial class TentacleRuntime : IAsyncDisposable
             SharedRoots = SharedRoots,
             HardwareTest = () => BuildHardwareTest(_configurationManager.GetEncodingOptions()),
             ForeignHardwareTest = ForeignHardwareTest,
+            CrossVendor = config.CrossVendorMode,
             Attribute = attributor.Attribute,
         };
 
@@ -127,7 +128,7 @@ public sealed partial class TentacleRuntime : IAsyncDisposable
     // otherwise such a tentacle takes the jobs that use no hardware, as before.
     private static HardwareTest? ForeignHardwareTest(GpuInfo gpu)
 #if NET10_0_OR_GREATER
-        => Config.CrossVendor ? BuildForeignHardwareTest(gpu) : null;
+        => Config.CrossVendorMode != PlacementMode.Disabled ? BuildForeignHardwareTest(gpu) : null;
 #else
         => null;
 #endif
@@ -498,6 +499,7 @@ public sealed partial class TentacleRuntime : IAsyncDisposable
             Options.LocalWeight = config.LocalWeight > 0 ? config.LocalWeight : 1;
             Options.LocalFallback = config.LocalFallback;
             Options.MetricsNameViewers = config.MetricsNameViewers;
+            Options.CrossVendor = config.CrossVendorMode;
             Options.VerifyInterval = TimeSpan.FromMinutes(Math.Max(1, config.VerifyIntervalMinutes));
             Broker.ReverifyAll();
         }
