@@ -16,17 +16,26 @@ public static class WorkerEncodingOptions
 {
     /// <summary>
     /// The hardware acceleration type a tentacle's GPU is driven with, if Tentacle can
-    /// rebuild command lines for it: VAAPI (AMD, Intel) and NVENC (NVIDIA).
+    /// rebuild command lines for it: VAAPI on a render node (AMD) and NVENC (NVIDIA, whose
+    /// device node is never put into the command line).
     /// </summary>
     /// <param name="gpu">The tentacle's GPU.</param>
     /// <returns>The type, or null.</returns>
     public static HardwareAccelerationType? TypeOf(GpuInfo gpu)
     {
         ArgumentNullException.ThrowIfNull(gpu);
+
+        // A tentacle reports these facts and its device goes into a command line: only
+        // what an agent's probe produces (the broker already drops anything else).
+        if (gpu.Problem() is not null)
+        {
+            return null;
+        }
+
         return gpu.Api switch
         {
-            "vaapi" => HardwareAccelerationType.vaapi,
-            "nvenc" or "cuda" => HardwareAccelerationType.nvenc,
+            "vaapi" when Hardware.IsRenderNode(gpu.Device) => HardwareAccelerationType.vaapi,
+            "nvenc" => HardwareAccelerationType.nvenc,
             _ => null,
         };
     }
@@ -72,7 +81,7 @@ public static class WorkerEncodingOptions
         var encode = gpu.Capabilities.Where(c => c.StartsWith("encode:", StringComparison.Ordinal)).Select(c => c[7..]).ToHashSet(StringComparer.Ordinal);
 
         options.HardwareAccelerationType = type;
-        options.VaapiDevice = type == HardwareAccelerationType.vaapi ? gpu.Device : options.VaapiDevice;
+        options.VaapiDevice = type == HardwareAccelerationType.vaapi ? gpu.Device : string.Empty;
         options.QsvDevice = string.Empty;
         options.EnableHardwareEncoding = true;
         options.HardwareDecodingCodecs = DecodingCodecs(decode);

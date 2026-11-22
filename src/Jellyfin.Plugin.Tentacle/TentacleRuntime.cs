@@ -321,10 +321,10 @@ public sealed partial class TentacleRuntime : IAsyncDisposable
     public static HardwareTest? BuildForeignHardwareTest(GpuInfo gpu)
     {
         ArgumentNullException.ThrowIfNull(gpu);
-        HardwareAccelerationType? type = gpu.Api switch
+        HardwareAccelerationType? type = gpu.Problem() is not null ? null : gpu.Api switch
         {
-            "vaapi" => HardwareAccelerationType.vaapi,
-            "nvenc" or "cuda" => HardwareAccelerationType.nvenc,
+            "vaapi" when Hardware.IsRenderNode(gpu.Device) => HardwareAccelerationType.vaapi,
+            "nvenc" => HardwareAccelerationType.nvenc,
             _ => null,
         };
         return type is { } t

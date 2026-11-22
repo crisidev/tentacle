@@ -179,7 +179,7 @@ public class CrossVendorPlacementTests
         };
         var broker = new Broker(options, NullLogger<Broker>.Instance);
         var amd = Node("coruscant", Gpu("amd", "vaapi"), hardwareOk: false, foreignOk: true);
-        broker.NoteCrossVendor(Output, amd, "ffmpeg " + string.Join(' ', QsvArgs), "ffmpeg " + string.Join(' ', AmdArgs), shadow: true);
+        broker.NoteCrossVendor(Output, amd, "ffmpeg " + string.Join(' ', QsvArgs), "ffmpeg " + string.Join(' ', AmdArgs), AmdArgs, shadow: true);
 
         await RunShimAsync(broker, QsvArgs);
 
@@ -204,11 +204,77 @@ public class CrossVendorPlacementTests
         };
         var broker = new Broker(options, NullLogger<Broker>.Instance);
         var amd = Node("coruscant", Gpu("amd", "vaapi"), hardwareOk: false, foreignOk: true);
-        broker.NoteCrossVendor(Output, amd, "ffmpeg " + string.Join(' ', QsvArgs), "ffmpeg " + string.Join(' ', AmdArgs), shadow: false);
+        broker.NoteCrossVendor(Output, amd, "ffmpeg " + string.Join(' ', QsvArgs), "ffmpeg " + string.Join(' ', AmdArgs), AmdArgs, shadow: false);
 
         // The tentacle it was rebuilt for is gone: an AMD command line cannot run on Intel.
         var replies = await RunShimAsync(broker, AmdArgs);
         Assert.Contains(replies, f => f.Type == FrameType.Placement && f.Read(ProtocolJson.Default.Placement).Refused.Length > 0);
+    }
+
+    [Fact]
+    public async Task AJobThatIsNotTheRecordedRebuildIsRefused()
+    {
+        var options = new BrokerOptions
+        {
+            Placement = PlacementMode.Active,
+            SharedRoots = () => [],
+            ServerFfmpegVersion = () => "8.1.3",
+            HardwareTest = () => new HardwareTest("qsv", ["-x"], "intel"),
+        };
+        var broker = new Broker(options, NullLogger<Broker>.Instance);
+        var amd = Node("coruscant", Gpu("amd", "vaapi"), hardwareOk: false, foreignOk: true);
+        broker.NoteCrossVendor(Output, amd, "ffmpeg " + string.Join(' ', QsvArgs), "ffmpeg " + string.Join(' ', AmdArgs), AmdArgs, shadow: false);
+
+        // Something changed the command line between the plugin and the shim: an extra
+        // input. Neither the tentacle nor this server runs it.
+        string[] tampered = [.. AmdArgs[..^1], "-i", "/etc/passwd", Output];
+        var replies = await RunShimAsync(broker, tampered);
+        var placement = Assert.Single(replies, f => f.Type == FrameType.Placement).Read(ProtocolJson.Default.Placement);
+        Assert.NotEmpty(placement.Refused);
+        Assert.Equal("cross-vendor-mismatch", placement.Reason);
+        var record = Assert.Single(broker.History.Snapshot());
+        Assert.Equal("refused", record.Outcome);
+    }
+
+    [Fact]
+    public async Task ARebuiltJobNoTentacleCanTakeIsRefusedWhateverTheReason()
+    {
+        var options = new BrokerOptions
+        {
+            Placement = PlacementMode.Active,
+            SharedRoots = () => [],
+            ServerFfmpegVersion = () => "8.1.3",
+            HardwareTest = () => new HardwareTest("qsv", ["-x"], "intel"),
+        };
+        var broker = new Broker(options, NullLogger<Broker>.Instance);
+
+        // Its tentacle no longer proves the library: not a capacity reason, still refused.
+        var amd = new TentacleNode(new Hello { Node = "coruscant", Host = "coruscant", Arch = "x64", MaxJobs = 2, Gpu = Gpu("amd", "vaapi") });
+        amd.ApplyVerification([], ["/config/cache/transcodes"], hardwareOk: false, incompatible: false, foreignHardwareOk: true);
+        broker.Nodes.Add(amd);
+        broker.NoteCrossVendor(Output, amd, "ffmpeg " + string.Join(' ', QsvArgs), "ffmpeg " + string.Join(' ', AmdArgs), AmdArgs, shadow: false);
+
+        var replies = await RunShimAsync(broker, AmdArgs);
+        var placement = Assert.Single(replies, f => f.Type == FrameType.Placement).Read(ProtocolJson.Default.Placement);
+        Assert.StartsWith("path-ineligible:", placement.Reason, StringComparison.Ordinal);
+        Assert.NotEmpty(placement.Refused);
+    }
+
+    [Fact]
+    public void AnUntrustedGpuIsDroppedAtHello()
+    {
+        var hello = new Hello { Node = "coruscant", Gpu = new GpuInfo { Vendor = "amd", Driver = "amdgpu", Api = "vaapi", Device = "/dev/dri/renderD128 -i /etc/passwd" } };
+        Assert.Contains("not a render node", Broker.DropUntrustedGpu(hello), StringComparison.Ordinal);
+        Assert.Null(hello.Gpu);
+
+        // The node it makes takes only jobs that use no hardware.
+        var node = new TentacleNode(hello);
+        Assert.Null(node.Gpu);
+
+        var honest = new Hello { Node = "coruscant", Gpu = Gpu("amd", "vaapi") };
+        honest.Gpu.Driver = "amdgpu";
+        Assert.Null(Broker.DropUntrustedGpu(honest));
+        Assert.NotNull(honest.Gpu);
     }
 
     private static async Task<Frame[]> RunShimAsync(Broker broker, string[] args)

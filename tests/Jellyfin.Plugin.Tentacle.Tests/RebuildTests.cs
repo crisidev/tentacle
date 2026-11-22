@@ -163,7 +163,16 @@ public class RebuildTests
         var state = State(server, options, type, sourceCodec, colorTransfer);
         var original = command(server, options, state);
         Assert.Contains("qsv", original, StringComparison.Ordinal);
-        return CommandRebuilder.Rebuild(server, options, Helper(new WorkerMediaEncoder(serverEncoder, gpu)), WorkerEncodingOptions.For(options, gpu)!, state, original, type);
+        var result = CommandRebuilder.Rebuild(server, options, Helper(new WorkerMediaEncoder(serverEncoder, gpu)), WorkerEncodingOptions.For(options, gpu)!, state, original, type);
+
+        // What Jellyfin builds for the other GPU passes the whole-command check the
+        // planner applies: only the GPU's parts differ.
+        if (result.Arguments is { } rebuilt)
+        {
+            Assert.Null(CommandRebuilder.WhatChanged(ProcessArguments.Split(original), ProcessArguments.Split(rebuilt)));
+        }
+
+        return result;
     }
 
     private static string Progressive(EncodingHelper helper, EncodingOptions options, StreamState state)
@@ -174,7 +183,7 @@ public class RebuildTests
         Assert.DoesNotContain("qsv", rebuilt, StringComparison.Ordinal);
         Assert.DoesNotContain("driver=iHD", rebuilt, StringComparison.Ordinal);
         Assert.True(CrossVendorPlanner.IsFor(rebuilt, gpu));
-        var analysis = ArgvAnalysis.Analyze("ffmpeg", CrossVendorPlanner.SplitArguments(rebuilt), "/");
+        var analysis = ArgvAnalysis.Analyze("ffmpeg", ProcessArguments.Split(rebuilt), "/");
         Assert.Equal(Media, Assert.Single(analysis.Inputs).Replace("file:", string.Empty, StringComparison.Ordinal));
     }
 

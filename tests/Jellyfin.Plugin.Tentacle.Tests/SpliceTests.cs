@@ -52,8 +52,8 @@ public class SpliceTests
         Assert.StartsWith("-analyzeduration 200M -probesize 1G -f matroska ", rebuilt, StringComparison.Ordinal);
 
         // What the broker sees: an AMD job with the same inputs and output.
-        var before = ArgvAnalysis.Analyze("ffmpeg", CrossVendorPlanner.SplitArguments(original), "/");
-        var after = ArgvAnalysis.Analyze("ffmpeg", CrossVendorPlanner.SplitArguments(rebuilt), "/");
+        var before = ArgvAnalysis.Analyze("ffmpeg", ProcessArguments.Split(original), "/");
+        var after = ArgvAnalysis.Analyze("ffmpeg", ProcessArguments.Split(rebuilt), "/");
         Assert.Equal(Hardware.Intel, before.HardwareVendor);
         Assert.Equal(Hardware.Amd, after.HardwareVendor);
         Assert.Equal(before.Output, after.Output);
@@ -98,7 +98,7 @@ public class SpliceTests
     [Fact]
     public void ArgumentsSplitAsTheShimReceivesThem()
     {
-        var args = CrossVendorPlanner.SplitArguments(Fixture("hls-h264_qsv-subs"));
+        var args = ProcessArguments.Split(Fixture("hls-h264_qsv-subs"));
         Assert.Contains("file:/data/movies/Test (2026)/Test (2026).mkv", args);
         Assert.Contains("-filter_complex", args);
         var filter = args[IndexOf(args, "-filter_complex") + 1];
@@ -106,8 +106,8 @@ public class SpliceTests
         Assert.Contains("subtitles=f='/config/data/data/subtitles/", filter, StringComparison.Ordinal);
         Assert.Equal("/config/cache/transcodes/0123456789abcdef0123456789abcdef.m3u8", args[^1]);
 
-        Assert.Equal(["a", "b c", "say \"hi\""], CrossVendorPlanner.SplitArguments("a  \"b c\" \"say \\\"hi\\\"\""));
-        Assert.Equal([string.Empty], CrossVendorPlanner.SplitArguments("\"\""));
+        Assert.Equal(["a", "b c", "say \"hi\""], ProcessArguments.Split("a  \"b c\" \"say \\\"hi\\\"\""));
+        Assert.Equal([string.Empty], ProcessArguments.Split("\"\""));
     }
 
     [Theory]
@@ -117,7 +117,7 @@ public class SpliceTests
     [InlineData("progressive-hevc_qsv")]
     public void RecordedCommandsAreIntelJobs(string name)
     {
-        var analysis = ArgvAnalysis.Analyze("ffmpeg", CrossVendorPlanner.SplitArguments(Fixture(name)), "/");
+        var analysis = ArgvAnalysis.Analyze("ffmpeg", ProcessArguments.Split(Fixture(name)), "/");
         Assert.Equal(JobKind.Transcode, analysis.Kind);
         Assert.True(analysis.UsesHardware);
         Assert.Equal(Hardware.Intel, analysis.HardwareVendor);

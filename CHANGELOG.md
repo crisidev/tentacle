@@ -14,6 +14,10 @@ version. The plugin's own changelog in `build.yaml` carries the latest entry.
   shadow mode the job's details show the command line it would have used. New metric
   `tentacle_cross_vendor_total`, placement reason `cross-vendor:<vendor>-<api>`.
   Trickplay, extraction, audio analysis and HDR sources keep the same-vendor rule.
+  A tentacle's GPU facts are untrusted input there: malformed ones are dropped (the
+  tentacle stays CPU-only), a rebuilt command line must equal Jellyfin's except for the
+  GPU's options, and the broker refuses a shim whose command line is not the recorded
+  rebuild.
 
 ## 2.0.3
 

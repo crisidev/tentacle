@@ -71,3 +71,17 @@ fuzzed; the soak test SIGKILLs agents and workers under load and then checks for
 file descriptors.
 
 Found a problem? See [SECURITY.md](../SECURITY.md).
+
+## Cross-vendor transcoding
+
+With cross-vendor transcoding on, the server builds command lines from what a tentacle
+reports about its GPU, so those facts are treated as untrusted. The broker drops a GPU
+whose facts are not what an agent's probe produces (a known hardware API matching the
+vendor, a device that is exactly `/dev/dri/renderD<n>`, or `/dev/nvidia<n>` for
+NVIDIA, which never goes into a command line, and known capabilities); that tentacle
+takes only jobs that use no hardware. The plugin checks them again before a device
+goes into Jellyfin's encoding settings. A rebuilt command line is compared with
+Jellyfin's as a whole: same inputs, output, maps and files, and, apart from the GPU's
+options, the same argv token for token. The broker records the exact argv and refuses
+a shim whose command line for that output differs, rather than running it anywhere.
+

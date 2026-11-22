@@ -1,12 +1,15 @@
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using Jellyfin.Data.Enums;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Streaming;
 using MediaBrowser.Model.Entities;
+using Tentacle.Protocol;
 using EncodingOptions = MediaBrowser.Model.Configuration.EncodingOptions;
 
 namespace Jellyfin.Plugin.Tentacle.CrossVendor;
@@ -49,6 +52,58 @@ public sealed record RebuildResult(string? Arguments, string Outcome)
 /// </summary>
 public static partial class CommandRebuilder
 {
+    // The options Jellyfin's EncodingHelper writes differently for another GPU, each with
+    // one value: hardware setup and decoders, the video encoder, its quality, bitrate and
+    // keyframe options, the filter chain, threads. Nothing else may differ.
+    private static readonly FrozenSet<string> HardwareOptions = new[]
+    {
+        "-init_hw_device", "-filter_hw_device", "-hwaccel", "-hwaccel_output_format", "-hwaccel_device", "-hwaccel_flags",
+        "-qsv_device", "-vaapi_device", "-c:v", "-codec:v", "-codec:v:0", "-vf", "-filter_complex", "-threads",
+        "-low_power", "-preset", "-mbbrc", "-b:v", "-maxrate", "-bufsize", "-rc_init_occupancy", "-rc_mode", "-rc", "-qmin", "-qmax",
+        "-profile:v:0", "-level", "-sei", "-async_depth", "-crf", "-cq", "-qp", "-global_quality", "-tune", "-compression_level",
+        "-gops_per_idr", "-header_insertion_mode", "-prio_speed", "-quality", "-look_ahead", "-look_ahead_depth", "-extbrc",
+        "-b_strategy", "-bf", "-refs", "-spatial-aq", "-temporal-aq", "-multipass", "-tier", "-forced-idr", "-r",
+        "-g:v:0", "-keyint_min:v:0", "-force_key_frames", "-force_key_frames:0", "-sc_threshold:v:0", "-flags:v", "-bsf:v",
+    }.ToFrozenSet(StringComparer.Ordinal);
+
+    /// <summary>
+    /// What a rebuilt command line changes besides the GPU's parts, or null when nothing:
+    /// the same inputs, output and maps, no file the original did not use, and, once the
+    /// GPU-dependent options and their values are set aside, the same argv token for
+    /// token. The splice already matched each part; this checks the result as a whole.
+    /// </summary>
+    /// <param name="original">The argv Jellyfin built.</param>
+    /// <param name="rebuilt">The rebuilt argv.</param>
+    /// <returns>What changed (inputs, output, paths, control, options), or null.</returns>
+    public static string? WhatChanged(IReadOnlyList<string> original, IReadOnlyList<string> rebuilt)
+    {
+        ArgumentNullException.ThrowIfNull(original);
+        ArgumentNullException.ThrowIfNull(rebuilt);
+        if (rebuilt.Any(a => a.Any(c => char.IsControl(c))))
+        {
+            return "control";
+        }
+
+        var before = ArgvAnalysis.Analyze("ffmpeg", original, "/");
+        var after = ArgvAnalysis.Analyze("ffmpeg", rebuilt, "/");
+        if (!after.Inputs.SequenceEqual(before.Inputs, StringComparer.Ordinal))
+        {
+            return "inputs";
+        }
+
+        if (!string.Equals(after.Output, before.Output, StringComparison.Ordinal))
+        {
+            return "output";
+        }
+
+        if (after.Paths.Except(before.Paths, StringComparer.Ordinal).Any() || after.Urls.Except(before.Urls, StringComparer.Ordinal).Any())
+        {
+            return "paths";
+        }
+
+        return WithoutHardware(original).SequenceEqual(WithoutHardware(rebuilt), StringComparer.Ordinal) ? null : "options";
+    }
+
     /// <summary>
     /// Rebuilds a command line.
     /// </summary>
@@ -175,6 +230,23 @@ public static partial class CommandRebuilder
             new("keyframes", server.GetHlsVideoKeyFrameArguments(state, serverEncoder, state.SegmentLength, isEvent, startNumber), worker.GetHlsVideoKeyFrameArguments(state, workerEncoder, state.SegmentLength, isEvent, startNumber)),
             new("filters", serverFilter, workerFilter),
         ];
+    }
+
+    private static List<string> WithoutHardware(IReadOnlyList<string> argv)
+    {
+        var kept = new List<string>(argv.Count);
+        for (var i = 0; i < argv.Count; i++)
+        {
+            if (HardwareOptions.Contains(argv[i]) && i + 1 < argv.Count)
+            {
+                i++;
+                continue;
+            }
+
+            kept.Add(argv[i]);
+        }
+
+        return kept;
     }
 
     private static string Threads(StreamState state, EncodingOptions options, string encoder)

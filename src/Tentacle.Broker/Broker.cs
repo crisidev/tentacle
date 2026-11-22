@@ -126,9 +126,11 @@ public sealed partial class Broker
     /// <param name="node">The tentacle it was rebuilt for.</param>
     /// <param name="original">The command line the server built (ffmpeg's arguments).</param>
     /// <param name="rewritten">The command line rebuilt for the tentacle.</param>
+    /// <param name="rewrittenArgv">Its argv, exactly as the shim will receive it: the shim's must equal it.</param>
     /// <param name="shadow">Whether it only would have been (shadow mode): the original runs.</param>
-    public void NoteCrossVendor(string output, TentacleNode node, string original, string rewritten, bool shadow)
+    public void NoteCrossVendor(string output, TentacleNode node, string original, string rewritten, IReadOnlyList<string> rewrittenArgv, bool shadow)
     {
+        ArgumentNullException.ThrowIfNull(rewrittenArgv);
         ArgumentException.ThrowIfNullOrEmpty(output);
         ArgumentNullException.ThrowIfNull(node);
         var now = DateTimeOffset.UtcNow;
@@ -139,7 +141,7 @@ public sealed partial class Broker
 
         var gpu = node.Gpu;
         var reason = gpu is null ? "cross-vendor" : Scheduler.CrossVendorReason(gpu);
-        _crossVendorNotes[output] = new CrossVendorNote(node.Name, gpu?.Vendor ?? string.Empty, gpu?.Device ?? string.Empty, reason, original, rewritten, shadow, now + CrossVendorNoteLife);
+        _crossVendorNotes[output] = new CrossVendorNote(node.Name, gpu?.Vendor ?? string.Empty, gpu?.Device ?? string.Empty, reason, original, rewritten, rewrittenArgv.ToArray(), shadow, now + CrossVendorNoteLife);
         Metrics.CrossVendor(node.Name, shadow ? "shadow" : "rebuilt");
     }
 
@@ -222,6 +224,17 @@ public sealed partial class Broker
             ? Nodes.Nodes.Where(n => string.Equals(n.Name, pinned.Node, StringComparison.Ordinal)
                 || (n.Gpu is { } g && string.Equals(g.Vendor, pinned.Vendor, StringComparison.Ordinal) && string.Equals(g.Device, pinned.Device, StringComparison.Ordinal))).ToArray()
             : Nodes.Nodes;
+        if (note is { Shadow: false } && !request.Args.SequenceEqual(note.Argv, StringComparer.Ordinal))
+        {
+            // The plugin recorded exactly what it rebuilt; anything else for that output
+            // was changed on the way. Neither runs it.
+            LogRebuildMismatch(analysis.Output ?? string.Empty, note.Node);
+            Metrics.CrossVendor(note.Node, "refused:mismatch");
+            var refused = new JobRecord { Id = NextJobId(), Kind = analysis.Kind.ToString(), StartedAt = DateTimeOffset.UtcNow, Reason = "cross-vendor-mismatch", Command = Shorten(request) };
+            await RefuseAsync(output, analysis, refused, foreign: true, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         PlacementDecision Decide() => request.Protocol == ProtocolInfo.Version
             ? Scheduler.Place(analysis, mode, Eligible(), strict ? null : Local, serverVendor, rebuiltFor)
             : new PlacementDecision(null, "protocol-mismatch", Scheduler.PolicyFor(analysis.Kind));
@@ -280,7 +293,9 @@ public sealed partial class Broker
         }
 
         record.Reason = decision.Reason;
-        if (strict && lease is null && decision.Policy.Remote && Scheduler.IsCapacity(decision.Reason))
+        // A rebuilt command line runs on its tentacle's GPU or nowhere: whatever kept
+        // it from a tentacle, this server's GPU cannot run it.
+        if (lease is null && decision.Policy.Remote && (foreign || (strict && Scheduler.IsCapacity(decision.Reason))))
         {
             await RefuseAsync(output, analysis, record, foreign, cancellationToken).ConfigureAwait(false);
             return;
@@ -381,6 +396,11 @@ public sealed partial class Broker
             ServerFfmpegVersion = Options.ServerFfmpegVersion(),
         };
         await SocketFrames.SendAsync(socket, Frame.Json(FrameType.Welcome, welcome, ProtocolJson.Default.Welcome), aborted).ConfigureAwait(false);
+
+        if (DropUntrustedGpu(hello) is { } gpuProblem)
+        {
+            LogGpuIgnored(hello.Node, gpuProblem);
+        }
 
         var node = new TentacleNode(hello) { Credential = credential };
         node.TokenMatch = Options.Match(credential, DateTimeOffset.UtcNow);
@@ -933,6 +953,25 @@ public sealed partial class Broker
     }
 
     /// <summary>
+    /// Drops the GPU an agent reported when its facts are not what a probe produces
+    /// (<see cref="GpuInfo.Problem"/>): the server builds command lines from them, so
+    /// such a tentacle keeps its CPU and takes only jobs that use no hardware.
+    /// </summary>
+    /// <param name="hello">The agent's hello.</param>
+    /// <returns>Why the GPU was dropped, or null when it was kept (or there was none).</returns>
+    public static string? DropUntrustedGpu(Hello hello)
+    {
+        ArgumentNullException.ThrowIfNull(hello);
+        if (hello.Gpu?.Problem() is not { } why)
+        {
+            return null;
+        }
+
+        hello.Gpu = null;
+        return why;
+    }
+
+    /// <summary>
     /// Whether a GPU is of another vendor than the one the server's hardware command
     /// lines are for, and has a hardware API of its own to rebuild them for.
     /// </summary>
@@ -1098,6 +1137,12 @@ public sealed partial class Broker
             node.Verifying = false;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Tentacle {Node}: GPU ignored, it takes only jobs that use no hardware: {Reason}")]
+    private partial void LogGpuIgnored(string node, string reason);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Tentacle: refused a transcode for {Output}: its command line is not the one rebuilt for {Node}")]
+    private partial void LogRebuildMismatch(string output, string node);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Tentacle {Node} registered (agent {Version}, {Ffmpeg}, {Slots} slots, {Background} background)")]
     private partial void LogRegistered(string node, string version, string ffmpeg, int slots, int background);

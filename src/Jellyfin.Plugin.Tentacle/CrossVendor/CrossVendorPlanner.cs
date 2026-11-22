@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Text;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Streaming;
@@ -60,7 +58,7 @@ public sealed partial class CrossVendorPlanner
         }
 
         var broker = _runtime.Broker;
-        var analysis = ArgvAnalysis.Analyze("ffmpeg", SplitArguments(original), "/");
+        var analysis = ArgvAnalysis.Analyze("ffmpeg", ProcessArguments.Split(original), "/");
         var codec = state.ActualOutputVideoCodec;
         var node = broker.PlanCrossVendor(analysis, n => n.Gpu is { } gpu && WorkerEncodingOptions.TypeOf(gpu) is not null && WorkerEncodingOptions.CanEncode(gpu, codec));
         if (node?.Gpu is not { } target)
@@ -83,70 +81,19 @@ public sealed partial class CrossVendorPlanner
             return null;
         }
 
-        if (result.Arguments is not { } rebuilt || !IsFor(rebuilt, target))
+        var changed = result.Arguments is { } args ? CommandRebuilder.WhatChanged(ProcessArguments.Split(original), ProcessArguments.Split(args)) : null;
+        if (result.Arguments is not { } rebuilt || changed is not null || !IsFor(rebuilt, target))
         {
-            var outcome = result.Rebuilt ? "skipped:vendor" : result.Outcome;
+            var outcome = !result.Rebuilt ? result.Outcome : changed is not null ? "skipped:changed:" + changed : "skipped:vendor";
             LogSkipped(node.Name, outcome);
             broker.Metrics.CrossVendor(node.Name, Label(outcome));
             return null;
         }
 
         var shadow = broker.Options.Placement == PlacementMode.DryRun;
-        broker.NoteCrossVendor(outputPath, node, "ffmpeg " + original, "ffmpeg " + rebuilt, shadow);
+        broker.NoteCrossVendor(outputPath, node, "ffmpeg " + original, "ffmpeg " + rebuilt, ProcessArguments.Split(rebuilt), shadow);
         LogRebuilt(node.Name, Scheduler.CrossVendorReason(target), shadow ? "would run there (shadow mode)" : "runs there");
         return shadow ? null : rebuilt;
-    }
-
-    /// <summary>
-    /// Splits arguments the way .NET passes a ProcessStartInfo.Arguments string to a
-    /// process on Linux (Jellyfin starts ffmpeg that way): spaces separate, double
-    /// quotes group, and a backslash escapes a double quote.
-    /// </summary>
-    /// <param name="arguments">The arguments string.</param>
-    /// <returns>The argv.</returns>
-    public static IReadOnlyList<string> SplitArguments(string arguments)
-    {
-        ArgumentNullException.ThrowIfNull(arguments);
-        var args = new List<string>();
-        var current = new StringBuilder();
-        var quoted = false;
-        var any = false;
-        for (var i = 0; i < arguments.Length; i++)
-        {
-            var c = arguments[i];
-            if (c == '\\' && i + 1 < arguments.Length && arguments[i + 1] == '"')
-            {
-                current.Append('"');
-                i++;
-                any = true;
-            }
-            else if (c == '"')
-            {
-                quoted = !quoted;
-                any = true;
-            }
-            else if (char.IsWhiteSpace(c) && !quoted)
-            {
-                if (any)
-                {
-                    args.Add(current.ToString());
-                    current.Clear();
-                    any = false;
-                }
-            }
-            else
-            {
-                current.Append(c);
-                any = true;
-            }
-        }
-
-        if (any)
-        {
-            args.Add(current.ToString());
-        }
-
-        return args;
     }
 
     /// <summary>
@@ -160,7 +107,7 @@ public sealed partial class CrossVendorPlanner
     public static bool IsFor(string rebuilt, GpuInfo gpu)
     {
         ArgumentNullException.ThrowIfNull(gpu);
-        var analysis = ArgvAnalysis.Analyze("ffmpeg", SplitArguments(rebuilt), "/");
+        var analysis = ArgvAnalysis.Analyze("ffmpeg", ProcessArguments.Split(rebuilt), "/");
         return analysis.UsesHardware && (analysis.HardwareVendor is { } vendor
             ? string.Equals(vendor, gpu.Vendor, StringComparison.Ordinal)
             : string.Equals(analysis.HardwareApi, gpu.Api, StringComparison.Ordinal));

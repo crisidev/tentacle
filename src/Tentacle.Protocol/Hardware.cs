@@ -42,6 +42,43 @@ public sealed class GpuInfo : IValidated
     {
         Validation.NoNulls(Capabilities, nameof(Capabilities));
     }
+
+    /// <summary>
+    /// Why these facts cannot be trusted to drive hardware, or null when they can. A
+    /// tentacle reports them, and the server builds command lines from them (its device
+    /// goes into a rebuilt transcode), so only what an agent's probe produces passes:
+    /// a known hardware API that matches the vendor, a render node (or, for NVIDIA,
+    /// whose node never goes into a command line, /dev/nvidiaN), and known capabilities.
+    /// </summary>
+    /// <returns>The reason, or null.</returns>
+    public string? Problem()
+    {
+        if (Api is not (Hardware.NoApi or "qsv" or "vaapi" or "nvenc"))
+        {
+            return $"unknown hardware API \"{Printable(Api)}\"";
+        }
+
+        if (Api != Hardware.NoApi && !string.Equals(Hardware.ApiFor(Vendor, Driver), Api, StringComparison.Ordinal))
+        {
+            return $"hardware API {Api} does not match vendor \"{Printable(Vendor)}\" with driver \"{Printable(Driver)}\"";
+        }
+
+        var deviceOk = Api == "nvenc" ? Hardware.IsNvidiaNode(Device) : (Device.Length == 0 && Api == Hardware.NoApi) || Hardware.IsRenderNode(Device);
+        if (!deviceOk)
+        {
+            return $"device \"{Printable(Device)}\" is not a render node";
+        }
+
+        var unknown = Capabilities.FirstOrDefault(c => !Hardware.Capabilities.Contains(c, StringComparer.Ordinal));
+        return unknown is null ? null : $"unknown capability \"{Printable(unknown)}\"";
+    }
+
+    // Into a log line: no control characters, bounded.
+    private static string Printable(string value)
+    {
+        var clean = new string(value.Select(c => char.IsControl(c) ? '?' : c).Take(64).ToArray());
+        return value.Length > 64 ? clean + "…" : clean;
+    }
 }
 
 /// <summary>
@@ -138,6 +175,21 @@ public static partial class Hardware
             return null;
         }
     }
+
+    /// <summary>
+    /// Whether a path is a DRM render node, exactly <c>/dev/dri/renderD</c> and digits:
+    /// the only device paths the server puts into a command line for a tentacle.
+    /// </summary>
+    /// <param name="path">The path.</param>
+    /// <returns>True for a render node.</returns>
+    public static bool IsRenderNode(string? path) => path is not null && ExactRenderNode().IsMatch(path);
+
+    /// <summary>
+    /// Whether a path is an NVIDIA device node, exactly <c>/dev/nvidia</c> and digits.
+    /// </summary>
+    /// <param name="path">The path.</param>
+    /// <returns>True for an NVIDIA node.</returns>
+    public static bool IsNvidiaNode(string? path) => path is not null && NvidiaNode().IsMatch(path);
 
     /// <summary>
     /// The Jellyfin hardware acceleration type that drives a GPU on Linux: QSV for
@@ -357,6 +409,12 @@ public static partial class Hardware
     /// </summary>
     private static int NvidiaIndex(string device)
         => int.TryParse(Path.GetFileName(device).AsSpan("nvidia".Length), NumberStyles.None, CultureInfo.InvariantCulture, out var i) && Path.GetFileName(device).StartsWith("nvidia", StringComparison.Ordinal) ? i : 0;
+
+    [GeneratedRegex(@"\A/dev/dri/renderD[0-9]{1,4}\z")]
+    private static partial Regex ExactRenderNode();
+
+    [GeneratedRegex(@"\A/dev/nvidia[0-9]{1,3}\z")]
+    private static partial Regex NvidiaNode();
 
     [GeneratedRegex(@"VAAPI driver:\s*(?<d>[^\r\n]+)")]
     private static partial Regex VaapiDriverLine();

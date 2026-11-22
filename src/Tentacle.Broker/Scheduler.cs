@@ -33,9 +33,10 @@ public sealed record PlacementDecision(TentacleNode? Node, string Reason, JobPol
 /// <param name="Reason">The placement reason (<c>cross-vendor:amd-vaapi</c>).</param>
 /// <param name="Original">The command line the server built.</param>
 /// <param name="Rewritten">The command line rebuilt for the tentacle.</param>
+/// <param name="Argv">The rebuilt argv the shim must send.</param>
 /// <param name="Shadow">Whether it only would have been: the original runs.</param>
 /// <param name="Expires">When the note is dropped if no shim came for it.</param>
-public sealed record CrossVendorNote(string Node, string Vendor, string Device, string Reason, string Original, string Rewritten, bool Shadow, DateTimeOffset Expires);
+public sealed record CrossVendorNote(string Node, string Vendor, string Device, string Reason, string Original, string Rewritten, IReadOnlyList<string> Argv, bool Shadow, DateTimeOffset Expires);
 
 /// <summary>
 /// Places jobs: each kind has a policy; a job goes to the tentacle with the lowest
