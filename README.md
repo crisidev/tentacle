@@ -107,7 +107,7 @@ same paths**.
 
    ```yaml
    environment:
-     DOCKER_MODS: crisidev/tentacle:worker-2.0.0
+     DOCKER_MODS: crisidev/tentacle:worker-2.0.1
      TENTACLE_BROKER_URL: wss://jellyfin.lan:8097
      TENTACLE_BROKER_FINGERPRINT: "AB:CD:...:EF"
      TENTACLE_TOKEN_FILE: /run/secrets/tentacle-token

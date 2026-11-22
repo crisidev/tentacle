@@ -3,6 +3,15 @@
 Every artifact (the plugin, the `tentacle` binary and the worker mod image) shares one
 version. The plugin's own changelog in `build.yaml` carries the latest entry.
 
+## 2.0.1
+
+- Fix: after Jellyfin's own restart (Dashboard → Restart, or a plugin update), the
+  metrics stayed at the previous broker's final state: `tentacle_broker_up 0` and every
+  tentacle `Disconnected`, so TentacleBrokerDown and TentacleNodeDown fired while jobs
+  ran fine. Jellyfin restarts in-process and the old broker's collect callback, which
+  prometheus-net cannot remove, ran last on every scrape. A stopped broker now stays
+  quiet. Restarting the container was the workaround.
+
 ## 2.0.0
 
 - The server needs only the plugin: no more server mod. The plugin ships the shim for

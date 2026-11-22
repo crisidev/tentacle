@@ -218,12 +218,22 @@ public sealed partial class TentacleRuntime : IAsyncDisposable
 
         _configurationManager.NamedConfigurationUpdated -= OnNamedConfigurationUpdated;
         await _stopping.CancelAsync().ConfigureAwait(false);
-        await Host.StopAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await Host.StopAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            // Jellyfin's restart button restarts in-process: the next runtime's broker
+            // shares Prometheus' default registry with this one.
+            Broker.Retire();
+        }
     }
 
     /// <inheritdoc />
     public ValueTask DisposeAsync()
     {
+        Broker.Retire();
         _stopping.Dispose();
         return Host.DisposeAsync();
     }

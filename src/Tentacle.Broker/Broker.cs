@@ -34,6 +34,7 @@ public sealed partial class Broker
     private readonly ILogger<Broker> _logger;
     private readonly LocalSeat _local = new();
     private long _jobCounter;
+    private volatile bool _retired;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Broker"/> class.
@@ -46,8 +47,18 @@ public sealed partial class Broker
         Options = options;
         _logger = logger;
         Metrics = metrics ?? new TentacleMetrics();
+        // prometheus-net cannot unregister a callback, and Jellyfin hands every broker the
+        // process-wide registry. Jellyfin's in-process restart builds a new broker while
+        // the old one's callback lives on; a retired broker stays quiet so it cannot
+        // overwrite its successor's gauges with its final state (broker down, every
+        // tentacle disconnected).
         Metrics.Registry.AddBeforeCollectCallback(() =>
         {
+            if (_retired)
+            {
+                return;
+            }
+
             Metrics.Refresh(Nodes.Nodes, Listening, Options.Placement, Local);
             Metrics.RefreshServer(Options.ServerName, !Options.LocalFallback ? "never" : Local.Slots > 0 ? "worker" : "backup");
             Metrics.RefreshRunning(History.Snapshot(JobHistory.Capacity), Options.MetricsNameViewers);
@@ -82,6 +93,12 @@ public sealed partial class Broker
 
     /// <summary>Gets the recent jobs.</summary>
     public JobHistory History { get; } = new();
+
+    /// <summary>
+    /// Stops this broker from refreshing the shared metrics, for good. Call it when the
+    /// broker is shut down; a broker created after it then owns the gauges.
+    /// </summary>
+    public void Retire() => _retired = true;
 
     /// <summary>
     /// Asks every tentacle to prove its shares and hardware again (encoding settings changed).

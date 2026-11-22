@@ -27,6 +27,24 @@ public class MetricsTests
     }
 
     [Fact]
+    public async Task RetiredBrokerLeavesSharedGaugesToItsSuccessor()
+    {
+        // Jellyfin's restart button restarts in-process: the next plugin instance builds
+        // a new broker on the same default registry, and the old broker's collect
+        // callback cannot be removed. Unretired, it reported its final state (broker down
+        // and every tentacle disconnected) over the new broker's on every scrape:
+        // prometheus-net runs callbacks newest first, so the oldest one has the last word.
+        var registry = Prometheus.Metrics.NewCustomRegistry();
+        var options = new BrokerOptions { Placement = PlacementMode.Active, SharedRoots = () => [], ServerFfmpegVersion = () => "8.1.3" };
+        var old = new Broker(options, NullLogger<Broker>.Instance, new TentacleMetrics(registry)) { Listening = false };
+        old.Retire();
+        var current = new Broker(options, NullLogger<Broker>.Instance, new TentacleMetrics(registry)) { Listening = true };
+
+        var text = await ScrapeAsync(current.Metrics);
+        Assert.Contains("\ntentacle_broker_up 1\n", text, StringComparison.Ordinal); // the HELP text also starts "1 when"
+    }
+
+    [Fact]
     public async Task LocalJobIsCountedWithItsPlacement()
     {
         var options = new BrokerOptions { Placement = PlacementMode.Active, SharedRoots = () => [], ServerFfmpegVersion = () => "8.1.3" };
@@ -76,7 +94,7 @@ public class MetricsTests
         Assert.Contains("tentacle_node_info{node=\"tatooine\",agent_version=\"0.3.0\",ffmpeg_version=\"8.1.3\",host=\"tatooine\",arch=\"\",vendor=\"none\",gpu=\"\",api=\"none\"} 1", text, StringComparison.Ordinal);
         Assert.Contains("tentacle_node_capability{node=\"tatooine\",capability=\"encode:h264\"} 0", text, StringComparison.Ordinal);
         Assert.Contains("tentacle_node_check{node=\"tatooine\",check=\"root:/data\",required=\"false\"} 0", text, StringComparison.Ordinal);
-        Assert.Contains("tentacle_broker_up 1", text, StringComparison.Ordinal);
+        Assert.Contains("\ntentacle_broker_up 1\n", text, StringComparison.Ordinal); // the HELP text also starts "1 when"
 
         // It reconnects with a new agent: the old info series goes.
         metrics.Refresh([Node("tatooine", agent: "0.4.0")], brokerUp: true, PlacementMode.Active);
