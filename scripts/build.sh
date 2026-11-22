@@ -67,8 +67,13 @@ do_plugin() {
     for build in "${plugin_builds[@]}"; do
         IFS=: read -r line framework abi revision <<<"${build}"
         out="dist/plugin/jellyfin-${line}"
+        # Jellyfin's installed-plugins list shows the DLL's AssemblyVersion, not
+        # meta.json's: stamp this build's revision (.1 for 12, .0 for 10.11) so it
+        # matches the catalog. The later -p wins over vprops' ${version}.0; the
+        # version the plugin reports at runtime is the informational one, X.Y.Z.
         "${dn[@]}" publish src/Jellyfin.Plugin.Tentacle/Jellyfin.Plugin.Tentacle.csproj \
-            -c Release -f "${framework}" -o dist/plugin-raw "${vprops[@]}"
+            -c Release -f "${framework}" -o dist/plugin-raw "${vprops[@]}" \
+            -p:AssemblyVersion="${version}.${revision}" -p:FileVersion="${version}.${revision}"
         mkdir -p "${out}"
         for a in "${assemblies[@]}"; do cp "dist/plugin-raw/${a}" "${out}/"; done
         for arch in amd64 arm64; do

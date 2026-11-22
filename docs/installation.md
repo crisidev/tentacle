@@ -29,7 +29,7 @@ Every release ships, from the same build:
 * **`crisidev/tentacle:worker-<version>`**, a [LinuxServer docker mod](https://github.com/linuxserver/docker-mods)
   on Docker Hub, for each tentacle: the Jellyfin image runs the Tentacle agent instead
   of Jellyfin. Pin the digest from the [release notes](https://github.com/crisidev/tentacle/releases)
-  (`crisidev/tentacle:worker-2.0.2@sha256:...`): a tag can be overwritten, a digest
+  (`crisidev/tentacle:worker-2.0.3@sha256:...`): a tag can be overwritten, a digest
   cannot. `:worker-main` follows the main branch.
 
 Keep the plugin and the worker mod on the same version.
@@ -112,7 +112,7 @@ ffmpeg, and `ffprobe` stays Jellyfin's.
        environment:
          PUID: "1000"                                    # same uid as the server
          PGID: "1000"
-         DOCKER_MODS: crisidev/tentacle:worker-2.0.2
+         DOCKER_MODS: crisidev/tentacle:worker-2.0.3
          TENTACLE_BROKER_URL: wss://jellyfin.lan:8097
          TENTACLE_BROKER_FINGERPRINT: "AB:CD:...:EF"     # from the dashboard
          TENTACLE_TOKEN_FILE: /run/secrets/tentacle-token

@@ -3,6 +3,13 @@
 Every artifact (the plugin, the `tentacle` binary and the worker mod image) shares one
 version. The plugin's own changelog in `build.yaml` carries the latest entry.
 
+## 2.0.3
+
+- Jellyfin's installed-plugins list shows the build's full version, as the catalog does:
+  `X.Y.Z.1` for Jellyfin 12.1+, `X.Y.Z.0` for 10.11. It reads the DLL's assembly
+  version, which was `X.Y.Z.0` in both builds, so the 12 build showed as `.0`.
+  Cosmetic: the right build was installed and updated either way.
+
 ## 2.0.2
 
 - The plugin is installed with automatic updates on: Jellyfin's **Update Plugins**
