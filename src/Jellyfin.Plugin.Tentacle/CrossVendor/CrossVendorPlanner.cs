@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using MediaBrowser.Common.Configuration;
 using MediaBrowser.Controller.MediaEncoding;
 using MediaBrowser.Controller.Streaming;
@@ -98,6 +99,86 @@ public sealed partial class CrossVendorPlanner
     }
 
     /// <summary>
+    /// Plans one trickplay extraction Jellyfin is about to start: if a tentacle with another
+    /// vendor's GPU should take it, predicts the command lines Jellyfin will start (built the
+    /// way its media encoder builds them, <see cref="TrickplayCommand"/>) and rebuilds each for
+    /// that GPU; the broker runs the rebuild when the shim brings exactly the prediction.
+    /// Never throws: any doubt leaves the job as Jellyfin builds it.
+    /// </summary>
+    /// <param name="request">What Jellyfin was asked to extract.</param>
+    /// <param name="serverHelper">The EncodingHelper Jellyfin builds it with.</param>
+    /// <param name="encoderVersion">Jellyfin's ffmpeg version.</param>
+    public void PlanTrickplay(TrickplayRequest request, EncodingHelper serverHelper, Version encoderVersion)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var broker = _runtime.Broker;
+        if (broker.CrossVendorMode == PlacementMode.Disabled)
+        {
+            return;
+        }
+
+        TentacleNode? node = null;
+        try
+        {
+            var serverOptions = _configurationManager.GetEncodingOptions();
+            var temp = _configurationManager.CommonApplicationPaths.TempDirectory;
+            var threads = EncodingHelper.GetNumberOfThreads(null, serverOptions, null);
+            var server = TrickplayCommand.Build(serverHelper, serverOptions, encoderVersion, threads, temp, request);
+            if (server.Count == 0)
+            {
+                return;
+            }
+
+            var analysis = ArgvAnalysis.Analyze("ffmpeg", ProcessArguments.Split(server[0]), "/");
+            node = broker.PlanCrossVendor(analysis, n => n.Gpu is { } gpu && WorkerEncodingOptions.TypeOf(gpu) is not null);
+            if (node?.Gpu is not { } target)
+            {
+                return;
+            }
+
+            var workerOptions = WorkerEncodingOptions.For(serverOptions, target)!;
+            var worker = TrickplayCommand.Build(HelperFor(target), workerOptions, encoderVersion, threads, temp, request);
+            var outcome = worker.Count == server.Count ? null : "skipped:shape";
+            var attempts = new List<TrickplayAttempt>(server.Count);
+            for (var i = 0; outcome is null && i < server.Count; i++)
+            {
+                var rebuilt = CommandRebuilder.PinVaapiDevice(worker[i], workerOptions);
+                var serverArgv = ProcessArguments.Split(server[i]);
+                var rebuiltArgv = ProcessArguments.Split(rebuilt);
+                if (CommandRebuilder.WhatChanged(serverArgv, rebuiltArgv) is { } changed)
+                {
+                    outcome = "skipped:changed:" + changed;
+                }
+                else if (!IsFor(rebuilt, target))
+                {
+                    outcome = "skipped:vendor";
+                }
+
+                attempts.Add(new TrickplayAttempt(serverArgv, rebuiltArgv));
+            }
+
+            if (outcome is not null)
+            {
+                LogTrickplaySkipped(node.Name, outcome);
+                broker.Metrics.CrossVendor(node.Name, Label(outcome), "Trickplay");
+                return;
+            }
+
+            var shadow = broker.CrossVendorMode != PlacementMode.Active;
+            broker.NoteTrickplay(node, attempts, temp, shadow);
+            LogTrickplayPlanned(node.Name, Scheduler.CrossVendorReason(target), shadow ? "would run there (shadow mode)" : "runs there");
+        }
+        catch (Exception e) when (e is not OutOfMemoryException)
+        {
+            LogTrickplayFailed(e, node?.Name ?? "-");
+            if (node is not null)
+            {
+                broker.Metrics.CrossVendor(node.Name, "skipped:error", "Trickplay");
+            }
+        }
+    }
+
+    /// <summary>
     /// Whether a rebuilt command line is for a tentacle's GPU: it names that GPU's vendor,
     /// or (plain VAAPI, which names none) drives only that GPU's hardware API. Anything
     /// still naming the server's hardware (h264_qsv, driver=iHD) is not.
@@ -133,4 +214,13 @@ public sealed partial class CrossVendorPlanner
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Tentacle: rebuilding a transcode for {Node} failed; it runs as Jellyfin built it")]
     private partial void LogFailed(Exception e, string node);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Tentacle: trickplay job rebuilt for {Node} ({Reason}): {What}")]
+    private partial void LogTrickplayPlanned(string node, string reason, string what);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Tentacle: trickplay job not rebuilt for {Node}: {Outcome}")]
+    private partial void LogTrickplaySkipped(string node, string outcome);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Tentacle: planning a trickplay job for {Node} failed; it runs as Jellyfin builds it")]
+    private partial void LogTrickplayFailed(Exception e, string node);
 }

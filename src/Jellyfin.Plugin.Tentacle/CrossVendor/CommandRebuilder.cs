@@ -60,7 +60,7 @@ public static partial class CommandRebuilder
         "-init_hw_device", "-filter_hw_device", "-hwaccel", "-hwaccel_output_format", "-hwaccel_device", "-hwaccel_flags",
         "-qsv_device", "-vaapi_device", "-c:v", "-codec:v", "-codec:v:0", "-vf", "-filter_complex", "-threads",
         "-low_power", "-preset", "-mbbrc", "-b:v", "-maxrate", "-bufsize", "-rc_init_occupancy", "-rc_mode", "-rc", "-qmin", "-qmax",
-        "-profile:v:0", "-level", "-sei", "-async_depth", "-crf", "-cq", "-qp", "-global_quality", "-tune", "-compression_level",
+        "-profile:v:0", "-level", "-sei", "-async_depth", "-crf", "-cq", "-qp", "-global_quality", "-global_quality:v", "-qscale:v", "-tune", "-compression_level",
         "-gops_per_idr", "-header_insertion_mode", "-prio_speed", "-quality", "-look_ahead", "-look_ahead_depth", "-extbrc",
         "-b_strategy", "-bf", "-refs", "-spatial-aq", "-temporal-aq", "-multipass", "-tier", "-forced-idr", "-r",
         "-g:v:0", "-keyint_min:v:0", "-force_key_frames", "-force_key_frames:0", "-sc_threshold:v:0", "-flags:v", "-bsf:v",

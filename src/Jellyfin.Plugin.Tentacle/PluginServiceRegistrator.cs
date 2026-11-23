@@ -43,8 +43,18 @@ public class PluginServiceRegistrator : IPluginServiceRegistrator
 
         // The container still builds (and disposes) Jellyfin's encoder; consumers get the wrapper.
         services.AddSingleton(implementation);
+#if NET10_0_OR_GREATER
+        // Trickplay for other vendors' GPUs goes through the planner the transcode manager's
+        // decoration registers (resolved on first use: it needs services built after this one).
+        services[index] = ServiceDescriptor.Singleton<IMediaEncoder>(sp =>
+            new ShimMediaEncoder(
+                (IMediaEncoder)sp.GetRequiredService(implementation),
+                sp.GetRequiredService<ShimInstaller>(),
+                new Lazy<CrossVendorPlanner?>(sp.GetService<CrossVendorPlanner>)));
+#else
         services[index] = ServiceDescriptor.Singleton<IMediaEncoder>(sp =>
             new ShimMediaEncoder((IMediaEncoder)sp.GetRequiredService(implementation), sp.GetRequiredService<ShimInstaller>()));
+#endif
     }
 
 #if NET10_0_OR_GREATER
