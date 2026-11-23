@@ -36,7 +36,17 @@ public sealed record PlacementDecision(TentacleNode? Node, string Reason, JobPol
 /// <param name="Argv">The rebuilt argv the shim must send.</param>
 /// <param name="Shadow">Whether it only would have been: the original runs.</param>
 /// <param name="Expires">When the note is dropped if no shim came for it.</param>
-public sealed record CrossVendorNote(string Node, string Vendor, string Device, string Reason, string Original, string Rewritten, IReadOnlyList<string> Argv, bool Shadow, DateTimeOffset Expires);
+/// <param name="Kind">The job's kind (Transcode, Trickplay), for the metric.</param>
+public sealed record CrossVendorNote(string Node, string Vendor, string Device, string Reason, string Original, string Rewritten, IReadOnlyList<string> Argv, bool Shadow, DateTimeOffset Expires, string Kind = "Transcode");
+
+/// <summary>
+/// One trickplay command line Jellyfin may start, as the host predicts it, and the command
+/// line rebuilt for a tentacle's GPU to run instead. Both end in the same output, with
+/// <see cref="Broker.TrickplayOutputPlaceholder"/> for the directory Jellyfin names per run.
+/// </summary>
+/// <param name="Server">The server's argv, as the shim will bring it.</param>
+/// <param name="Rebuilt">The argv rebuilt for the tentacle.</param>
+public sealed record TrickplayAttempt(IReadOnlyList<string> Server, IReadOnlyList<string> Rebuilt);
 
 /// <summary>
 /// Places jobs: each kind has a policy; a job goes to the tentacle with the lowest
@@ -242,7 +252,7 @@ public static class Scheduler
         ArgumentNullException.ThrowIfNull(nodes);
         ArgumentNullException.ThrowIfNull(canTake);
         var policy = PolicyFor(analysis.Kind);
-        if (mode == PlacementMode.Disabled || analysis.Kind != JobKind.Transcode || !analysis.UsesHardware || analysis.UsesLoopback || serverVendor is not { Length: > 0 })
+        if (mode == PlacementMode.Disabled || analysis.Kind is not (JobKind.Transcode or JobKind.Trickplay) || !analysis.UsesHardware || analysis.UsesLoopback || serverVendor is not { Length: > 0 })
         {
             return null;
         }

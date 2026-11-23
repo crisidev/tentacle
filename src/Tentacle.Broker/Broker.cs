@@ -167,7 +167,7 @@ public sealed partial class Broker
         var gpu = node.Gpu;
         var reason = gpu is null ? "cross-vendor" : Scheduler.CrossVendorReason(gpu);
         _crossVendorNotes[output] = new CrossVendorNote(node.Name, gpu?.Vendor ?? string.Empty, gpu?.Device ?? string.Empty, reason, original, rewritten, rewrittenArgv.ToArray(), shadow, now + CrossVendorNoteLife);
-        Metrics.CrossVendor(node.Name, shadow ? "shadow" : "rebuilt");
+        Metrics.CrossVendor(node.Name, shadow ? "shadow" : "rebuilt", "Transcode");
     }
 
     private CrossVendorNote? TakeCrossVendorNote(string output)
@@ -234,10 +234,18 @@ public sealed partial class Broker
             request = start.Read(ProtocolJson.Default.StartRequest);
         }
 
+        // A trickplay job the host predicted runs rebuilt for its tentacle's GPU from here
+        // on (shadow mode only shows the rebuild): Jellyfin started the server's.
+        var trickplay = MatchTrickplay(request.Args);
+        if (trickplay is { Shadow: false })
+        {
+            request.Args = [.. trickplay.Argv];
+        }
+
         var analysis = ArgvAnalysis.Analyze(request.Binary, request.Args, request.Cwd);
         var mode = Options.Placement;
         var serverVendor = Options.HardwareTest()?.Vendor;
-        var note = analysis.Output is { } outputPath ? TakeCrossVendorNote(outputPath) : null;
+        var note = trickplay ?? (analysis.Output is { } outputPath ? TakeCrossVendorNote(outputPath) : null);
 
         // Without the fallback this server neither competes for jobs nor takes one a
         // tentacle could run: such a job waits for a tentacle, then is refused. A command
@@ -254,7 +262,7 @@ public sealed partial class Broker
             // The plugin recorded exactly what it rebuilt; anything else for that output
             // was changed on the way. Neither runs it.
             LogRebuildMismatch(analysis.Output ?? string.Empty, note.Node);
-            Metrics.CrossVendor(note.Node, "refused:mismatch");
+            Metrics.CrossVendor(note.Node, "refused:mismatch", note.Kind);
             var refused = new JobRecord { Id = NextJobId(), Kind = analysis.Kind.ToString(), StartedAt = DateTimeOffset.UtcNow, Reason = "cross-vendor-mismatch", Command = Shorten(request) };
             await RefuseAsync(output, analysis, refused, foreign: true, cancellationToken).ConfigureAwait(false);
             return;

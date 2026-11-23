@@ -75,8 +75,8 @@ public sealed class TentacleMetrics
             new CounterConfiguration { LabelNames = ["kind", "node", "reason"] });
         _crossVendor = factory.CreateCounter(
             "tentacle_cross_vendor_total",
-            "Transcodes considered for a tentacle with another vendor's GPU: rebuilt for it, shadow (would have been), or skipped and why (no-match, hdr, codec, error).",
-            new CounterConfiguration { LabelNames = ["node", "outcome"] });
+            "Transcodes and trickplay jobs considered for a tentacle with another vendor's GPU: rebuilt for it, shadow (would have been), or skipped and why (no-match, hdr, codec, error), by job kind.",
+            new CounterConfiguration { LabelNames = ["node", "outcome", "kind"] });
         _nodeState = factory.CreateGauge(
             "tentacle_node_state",
             "1 for the tentacle's current state, 0 for the others.",
@@ -136,11 +136,12 @@ public sealed class TentacleMetrics
     }
 
     /// <summary>
-    /// Counts a transcode considered for a tentacle with another vendor's GPU.
+    /// Counts a job considered for a tentacle with another vendor's GPU.
     /// </summary>
     /// <param name="node">The tentacle.</param>
     /// <param name="outcome">rebuilt, shadow, or skipped:&lt;why&gt;.</param>
-    public void CrossVendor(string node, string outcome) => _crossVendor.WithLabels(node, outcome).Inc();
+    /// <param name="kind">The job's kind (Transcode, Trickplay).</param>
+    public void CrossVendor(string node, string outcome, string kind) => _crossVendor.WithLabels(node, outcome, kind).Inc();
 
     /// <summary>
     /// Records a finished job.

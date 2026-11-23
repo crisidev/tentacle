@@ -365,7 +365,7 @@ public class CrossVendorPlacementTests
         // And what it would have been.
         Assert.Contains("h264_vaapi", record.RewrittenCommand, StringComparison.Ordinal);
         Assert.Equal("coruscant", record.RewrittenFor);
-        Assert.Contains("tentacle_cross_vendor_total{node=\"coruscant\",outcome=\"shadow\"} 1", await ScrapeAsync(broker), StringComparison.Ordinal);
+        Assert.Contains("tentacle_cross_vendor_total{node=\"coruscant\",outcome=\"shadow\",kind=\"Transcode\"} 1", await ScrapeAsync(broker), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -383,7 +383,7 @@ public class CrossVendorPlacementTests
         Assert.Equal("dry-run:cross-vendor:amd-vaapi", record.Reason);
         Assert.Equal("coruscant", record.WouldRunOn);
         Assert.Contains("h264_vaapi", record.RewrittenCommand, StringComparison.Ordinal);
-        Assert.Contains("outcome=\"shadow\"} 1", await ScrapeAsync(broker), StringComparison.Ordinal);
+        Assert.Contains("outcome=\"shadow\",kind=\"Transcode\"} 1", await ScrapeAsync(broker), StringComparison.Ordinal);
         Assert.DoesNotContain("outcome=\"rebuilt\"", await ScrapeAsync(broker), StringComparison.Ordinal);
     }
 

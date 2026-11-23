@@ -77,7 +77,7 @@ public sealed partial class CrossVendorPlanner
         {
             // Jellyfin's helpers on another GPU's settings: any surprise leaves the job alone.
             LogFailed(e, node.Name);
-            broker.Metrics.CrossVendor(node.Name, "skipped:error");
+            broker.Metrics.CrossVendor(node.Name, "skipped:error", "Transcode");
             return null;
         }
 
@@ -86,7 +86,7 @@ public sealed partial class CrossVendorPlanner
         {
             var outcome = !result.Rebuilt ? result.Outcome : changed is not null ? "skipped:changed:" + changed : "skipped:vendor";
             LogSkipped(node.Name, outcome);
-            broker.Metrics.CrossVendor(node.Name, Label(outcome));
+            broker.Metrics.CrossVendor(node.Name, Label(outcome), "Transcode");
             return null;
         }
 
