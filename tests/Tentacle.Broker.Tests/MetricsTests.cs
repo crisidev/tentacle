@@ -67,6 +67,42 @@ public class MetricsTests
     }
 
     [Fact]
+    public async Task CrossVendorModeIsTheOneInEffect()
+    {
+        var registry = Prometheus.Metrics.NewCustomRegistry();
+        var options = new BrokerOptions { Placement = PlacementMode.DryRun, CrossVendor = PlacementMode.Active, SharedRoots = () => [], ServerFfmpegVersion = () => "8.1.3" };
+        var broker = new Broker(options, NullLogger<Broker>.Instance, new TentacleMetrics(registry));
+
+        // Active on its own, but placement only goes as far as Shadow.
+        var text = await ScrapeAsync(broker.Metrics);
+        Assert.Contains("tentacle_cross_vendor_mode{mode=\"DryRun\"} 1", text, StringComparison.Ordinal);
+        Assert.Contains("tentacle_cross_vendor_mode{mode=\"Active\"} 0", text, StringComparison.Ordinal);
+        Assert.Contains("tentacle_cross_vendor_mode{mode=\"Disabled\"} 0", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SkippedChecksAreNotExportedAsFailures()
+    {
+        // The server's QSV test on an AMD tentacle: it does not apply, so it is not a
+        // failing optional check; the tentacle's own VAAPI test is.
+        var metrics = new TentacleMetrics();
+        var node = new TentacleNode(new Hello { Node = "coruscant", MaxJobs = 4, MaxBackgroundJobs = 2, AgentVersion = "2.2.0", FfmpegVersion = "ffmpeg version 8.1.3" });
+        NodeCheck[] checks =
+        [
+            new("ffmpeg", true, "8.1.3"),
+            new("hardware:qsv", false, "amd GPU, and Jellyfin builds qsv commands for intel", Required: false, Skipped: true),
+            new("hardware:vaapi", true, "self-test passed", Required: false),
+        ];
+        node.ApplyVerification(checks, ["/config/cache/transcodes"], false, false, foreignHardwareOk: true);
+        metrics.Refresh([node], brokerUp: true, PlacementMode.Active);
+
+        var text = await ScrapeAsync(metrics);
+        Assert.DoesNotContain("check=\"hardware:qsv\"", text, StringComparison.Ordinal);
+        Assert.Contains("tentacle_node_check{node=\"coruscant\",check=\"hardware:vaapi\",required=\"false\"} 1", text, StringComparison.Ordinal);
+        Assert.Contains("tentacle_node_state{node=\"coruscant\",state=\"Ready\"} 1", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ServerInfoNamesTheServerAndKeepsOneRole()
     {
         var metrics = new TentacleMetrics();

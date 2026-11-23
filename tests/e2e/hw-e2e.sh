@@ -115,7 +115,7 @@ node gpu | jq -e '.Gpu.Capabilities | index("encode:h264") and index("decode:h26
 failed() { node "$1" | jq '[.Checks[] | select(.Required and (.Ok | not) and (.Name | startswith("root:") | not))] | length'; }
 [[ "$(failed gpu)" == 0 && "$(node gpu | jq -r .HardwareOk)" == true ]] || fail "gpu tentacle: a required check failed"
 [[ "$(node cpu | jq -r '.Gpu')" == null && "$(failed cpu)" == 0 ]] || fail "cpu tentacle should be a CPU tentacle with no failed required check"
-node cpu | jq -e '.Checks[] | select(.Name=="hardware:qsv") | (.Ok == false and .Required == false and (.Detail | test("no GPU")))' >/dev/null || fail "cpu tentacle: hardware check should be skipped, optional"
+node cpu | jq -e '.Checks[] | select(.Name=="hardware:qsv") | (.Ok == false and .Required == false and .Skipped == true and (.Detail | test("no GPU")))' >/dev/null || fail "cpu tentacle: hardware check should be skipped, optional"
 [[ "$(node probe/renderD128 | jq -r '.State + " " + .Gpu.Vendor + " " + (.MaxJobs|tostring)')" == "DetectOnly intel 0" ]] || fail "probe/renderD128 not a detect-only Intel tentacle"
 [[ "$(node probe/renderD129 | jq -r '.State + " " + .Gpu.Api')" == "DetectOnly none" ]] || fail "probe/renderD129 not a detect-only tentacle without API"
 echo "gpu: $(check gpu hardware:qsv)"

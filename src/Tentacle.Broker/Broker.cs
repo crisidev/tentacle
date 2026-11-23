@@ -61,7 +61,7 @@ public sealed partial class Broker
                 return;
             }
 
-            Metrics.Refresh(Nodes.Nodes, Listening, Options.Placement, Local);
+            Metrics.Refresh(Nodes.Nodes, Listening, Options.Placement, Local, CrossVendorMode);
             Metrics.RefreshServer(Options.ServerName, !Options.LocalFallback ? "never" : Local.Slots > 0 ? "worker" : "backup");
             Metrics.RefreshRunning(History.Snapshot(JobHistory.Capacity), Options.MetricsNameViewers);
         });
@@ -1143,7 +1143,7 @@ public sealed partial class Broker
             if (hardware is not null && skipHardware is not null)
             {
                 // Not a fault: this tentacle runs everything that uses no hardware.
-                checks.Add(new NodeCheck($"hardware:{hardware.Type}", false, skipHardware, Required: false));
+                checks.Add(new NodeCheck($"hardware:{hardware.Type}", false, skipHardware, Required: false, Skipped: true));
                 if (foreign is not null)
                 {
                     foreignOk = result.HardwareTested && result.HardwareOk;
@@ -1158,8 +1158,9 @@ public sealed partial class Broker
             }
 
             node.ApplyVerification(checks, verified, hardwareOk, incompatible, foreignOk);
-            var failed = checks.Where(c => !c.Ok).Select(c => $"{c.Name}{(c.Required ? string.Empty : " [optional]")} ({c.Detail})").ToArray();
-            LogVerified(node.Name, node.State, verified.Count, probes.Count, failed.Length == 0 ? "all checks passed" : string.Join("; ", failed));
+            var failed = checks.Where(c => !c.Ok && !c.Skipped).Select(c => $"{c.Name}{(c.Required ? string.Empty : " [optional]")} ({c.Detail})").ToArray();
+            var skipped = checks.Where(c => c.Skipped).Select(c => $"; {c.Name} not tested ({c.Detail})");
+            LogVerified(node.Name, node.State, verified.Count, probes.Count, (failed.Length == 0 ? "all checks passed" : string.Join("; ", failed)) + string.Concat(skipped));
         }
         catch (Exception e) when (e is TimeoutException or OperationCanceledException or IOException or UnauthorizedAccessException)
         {
