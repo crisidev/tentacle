@@ -43,6 +43,23 @@ public sealed class JobRecord
     /// <summary>Gets or sets the command line, shortened.</summary>
     public string Command { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Gets or sets, for a transcode rebuilt for a tentacle's GPU of another vendor, the
+    /// command line the server had built (shortened); <see cref="Command"/> is what ran.
+    /// </summary>
+    public string? OriginalCommand { get; set; }
+
+    /// <summary>
+    /// Gets or sets, in shadow mode, the command line the transcode would have been
+    /// rebuilt to for a tentacle's GPU of another vendor (shortened).
+    /// </summary>
+    public string? RewrittenCommand { get; set; }
+
+    /// <summary>
+    /// Gets or sets the tentacle <see cref="RewrittenCommand"/> was rebuilt for.
+    /// </summary>
+    public string? RewrittenFor { get; set; }
+
     /// <summary>Gets or sets the Jellyfin user the job serves (playback only).</summary>
     public string? User { get; set; }
 
@@ -108,6 +125,9 @@ public sealed class JobHistory
                 ExitCode = j.ExitCode,
                 Nice = j.Nice,
                 Command = j.Command,
+                OriginalCommand = j.OriginalCommand,
+                RewrittenCommand = j.RewrittenCommand,
+                RewrittenFor = j.RewrittenFor,
                 User = j.User,
                 Client = j.Client,
                 Item = j.Item,

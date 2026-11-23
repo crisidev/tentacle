@@ -205,6 +205,15 @@
                                 </label>
                                 <div class="fieldDescription checkboxFieldDescription">Adds the user, app and item of each running job to <code>tentacle_running_job_start_time_seconds</code>, for Grafana tables of who is transcoding what. Anyone who can read Jellyfin's <code>/metrics</code> would see who watches what, so it is off by default. <span class="t-when">applies now</span></div>
                             </div>
+                            <div class="selectContainer">
+                                <label class="selectLabel" for="CrossVendorMode">Transcodes on tentacles with another vendor's GPU (experimental) <span class="t-when">new jobs</span></label>
+                                <select is="emby-select" id="CrossVendorMode" class="emby-select-withcolor emby-select">
+                                    <option value="Disabled">Off</option>
+                                    <option value="DryRun">Shadow: record the rebuilt command line, run the job as Jellyfin built it</option>
+                                    <option value="Active">Active: run rebuilt transcodes on those tentacles</option>
+                                </select>
+                                <div class="fieldDescription">A tentacle whose GPU is from another vendor than this server's (AMD or NVIDIA for an Intel server) is tested with its own hardware (VAAPI or NVENC), and playback transcodes may go there: Jellyfin builds the transcode again for that GPU, and only when every part of it checks out. HDR sources, trickplay and extraction keep the usual rules. In shadow, jobs run and are placed as usual, and their details show the command line they would have used. It never goes further than "Where jobs run". Jellyfin 12.1 and later. <span id="CrossVendorEffective" class="t-when"></span></div>
+                            </div>
                         </fieldset>
 
                         <fieldset class="t-group">
@@ -337,8 +346,22 @@
                     var m = /^ffmpeg version (\S+)/.exec(line || '');
                     return m ? m[1] : (line || 'unknown');
                 }
+                // Cross-vendor transcoding never goes further than where jobs run: say which one limits it.
+                function crossVendorEffective() {
+                    var rank = { Disabled: 0, DryRun: 1, Active: 2 };
+                    var names = { Disabled: 'Off', DryRun: 'Shadow', Active: 'Active' };
+                    var overall = q('#Placement').value, own = q('#CrossVendorMode').value;
+                    var text = rank[overall] < rank[own]
+                        ? 'Now ' + names[overall].toLowerCase() + ': limited by "Where jobs run" (' + names[overall] + ').'
+                        : 'Now ' + names[own].toLowerCase() + ': this setting.';
+                    q('#CrossVendorEffective').textContent = text;
+                }
                 function reason(r) {
                     if (!r) { return ''; }
+                    if (r.indexOf('cross-vendor:') === 0 || r.indexOf('dry-run:cross-vendor:') === 0) {
+                        var gpu = esc(r.substring(r.indexOf('cross-vendor:') + 13));
+                        return r.indexOf('dry-run:') === 0 ? 'would be rebuilt for its ' + gpu + ' GPU (shadow)' : 'rebuilt for its ' + gpu + ' GPU';
+                    }
                     if (r.indexOf('path-ineligible:') === 0) {
                         return 'path not shared: <code>' + esc(r.substring(16)) + '</code>';
                     }
@@ -561,7 +584,10 @@
                             row += '<tr class="t-detail"><td colspan="7"><dl class="t-facts">'
                                 + '<dt>Job</dt><dd>' + esc(j.Id) + (j.PlaySessionId ? ', play session ' + esc(j.PlaySessionId) : '') + (j.Nice ? ', nice ' + j.Nice : '') + '</dd>'
                                 + (j.WouldRunOn ? '<dt>Would run on</dt><dd>' + esc(j.WouldRunOn) + '</dd>' : '')
-                                + '<dt>Command</dt><dd><code>' + esc(j.Command) + '</code></dd></dl></td></tr>';
+                                + '<dt>Command</dt><dd><code>' + esc(j.Command) + '</code></dd>'
+                                + (j.OriginalCommand ? '<dt>As Jellyfin built it</dt><dd><code>' + esc(j.OriginalCommand) + '</code></dd>' : '')
+                                + (j.RewrittenCommand ? '<dt>Would be rebuilt for ' + esc(j.RewrittenFor || j.WouldRunOn || 'the tentacle') + '</dt><dd><code>' + esc(j.RewrittenCommand) + '</code></dd>' : '')
+                                + '</dl></td></tr>';
                         }
 
                         return row;
@@ -658,6 +684,8 @@
                         q('#ExtraRoots').value = (config.ExtraRoots || []).join('\n');
                         q('#StrictFfmpegVersion').checked = config.StrictFfmpegVersion;
                         q('#MetricsNameViewers').checked = !!config.MetricsNameViewers;
+                        q('#CrossVendorMode').value = config.CrossVendorMode || 'Disabled';
+                        crossVendorEffective();
                         q('#BackgroundNice').value = config.BackgroundNice;
                         q('#LocalRole').value = config.LocalSlots > 0 ? 'compete' : config.LocalFallback === false ? 'never' : 'backup';
                         q('#LocalSlots').value = config.LocalSlots || 4;
@@ -679,6 +707,8 @@
 
                 q('#Tls').addEventListener('change', showTlsFields);
                 q('#LocalRole').addEventListener('change', showLocalRole);
+                q('#Placement').addEventListener('change', crossVendorEffective);
+                q('#CrossVendorMode').addEventListener('change', crossVendorEffective);
 
                 q('#TNodes').addEventListener('click', function (e) {
                     if (e.target.closest('.tentacle-role')) {
@@ -749,6 +779,7 @@
                         config.SocketPath = q('#SocketPath').value.trim();
                         config.StrictFfmpegVersion = q('#StrictFfmpegVersion').checked;
                         config.MetricsNameViewers = q('#MetricsNameViewers').checked;
+                        config.CrossVendorMode = q('#CrossVendorMode').value;
                         config.BackgroundNice = Math.min(19, Math.max(0, parseInt(q('#BackgroundNice').value, 10) || 0));
                         var role = q('#LocalRole').value;
                         config.LocalSlots = role === 'compete' ? Math.min(64, Math.max(1, parseInt(q('#LocalSlots').value, 10) || 4)) : 0;

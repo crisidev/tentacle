@@ -177,6 +177,14 @@ An updated plugin does not update the tentacles: move their
 same protocol work together, and the broker refuses an agent that speaks another one,
 logging why.
 
+Pre-releases (`vX.Y.Z-beta1`...) are never offered by the plugin repository: it follows
+GitHub's latest release, which skips them. To try one, download the plugin zip for your
+Jellyfin from the pre-release's page, unpack it into `<data>/plugins/Tentacle_<version>`
+(the version in its `meta.json`) and restart Jellyfin, and use its
+`crisidev/tentacle:worker-X.Y.Z-beta1` for the tentacles. Its plugin version is the final
+release's (2.1.0.1 for 2.1.0-beta1), so Jellyfin will not replace it with that release
+either: install the final one the same way.
+
 ## Uninstalling
 
 If you set `JELLYFIN_FFMPEG` or `FFMPEG_PATH` to the shim, remove it first. Then

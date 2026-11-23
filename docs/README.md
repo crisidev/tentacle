@@ -8,4 +8,4 @@
 * [Security](security.md): job confinement, TLS, token rotation.
 * [Troubleshooting](troubleshooting.md): why a job ran where it did, and what to check.
 * [Architecture](architecture.md): how it works, the wire protocol, verification,
-  scheduling, and the plan for other GPU vendors.
+  scheduling, and cross-vendor transcoding (other GPU vendors).

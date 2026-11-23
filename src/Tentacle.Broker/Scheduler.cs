@@ -24,6 +24,21 @@ public sealed record JobPolicy(bool Remote, bool Background, double Cost);
 public sealed record PlacementDecision(TentacleNode? Node, string Reason, JobPolicy Policy, string? WouldRunOn = null);
 
 /// <summary>
+/// A transcode the host rebuilt (or would have) for a tentacle's GPU of another
+/// vendor, waiting for its shim to connect.
+/// </summary>
+/// <param name="Node">The tentacle it was rebuilt for.</param>
+/// <param name="Vendor">That tentacle's GPU vendor.</param>
+/// <param name="Device">The device the rebuilt command line opens.</param>
+/// <param name="Reason">The placement reason (<c>cross-vendor:amd-vaapi</c>).</param>
+/// <param name="Original">The command line the server built.</param>
+/// <param name="Rewritten">The command line rebuilt for the tentacle.</param>
+/// <param name="Argv">The rebuilt argv the shim must send.</param>
+/// <param name="Shadow">Whether it only would have been: the original runs.</param>
+/// <param name="Expires">When the note is dropped if no shim came for it.</param>
+public sealed record CrossVendorNote(string Node, string Vendor, string Device, string Reason, string Original, string Rewritten, IReadOnlyList<string> Argv, bool Shadow, DateTimeOffset Expires);
+
+/// <summary>
 /// Places jobs: each kind has a policy; a job goes to the tentacle with the lowest
 /// weighted load among those that are schedulable, proved they share every path
 /// the job names, have working hardware if the job uses it, and have room.
@@ -82,13 +97,24 @@ public static class Scheduler
     /// <param name="mode">The placement mode.</param>
     /// <param name="nodes">The connected tentacles.</param>
     /// <param name="local">This server's seat, when it competes for jobs (slots above 0).</param>
+    /// <param name="serverVendor">The GPU vendor the server's own hardware command lines are for, when known.</param>
+    /// <param name="rebuiltFor">The vendor the host rebuilt this command line for, when it did: a plain VAAPI
+    /// command line names no vendor, so the host's word decides.</param>
     /// <returns>The decision.</returns>
-    public static PlacementDecision Place(ArgvAnalysis analysis, PlacementMode mode, IReadOnlyCollection<TentacleNode> nodes, LocalSeat? local = null)
+    public static PlacementDecision Place(ArgvAnalysis analysis, PlacementMode mode, IReadOnlyCollection<TentacleNode> nodes, LocalSeat? local = null, string? serverVendor = null, string? rebuiltFor = null)
     {
         ArgumentNullException.ThrowIfNull(analysis);
         ArgumentNullException.ThrowIfNull(nodes);
 
         var policy = PolicyFor(analysis.Kind);
+        var foreign = rebuiltFor is { Length: > 0 } || IsForeignJob(analysis, serverVendor);
+        var vendor = rebuiltFor is { Length: > 0 } ? rebuiltFor : analysis.HardwareVendor;
+        if (foreign)
+        {
+            // Rebuilt for another vendor's GPU: this server cannot run it.
+            local = null;
+        }
+
         if (mode == PlacementMode.Disabled)
         {
             return new PlacementDecision(null, "disabled", policy);
@@ -122,7 +148,17 @@ public static class Scheduler
             return new PlacementDecision(null, $"path-ineligible:{unshared}", policy);
         }
 
-        if (analysis.UsesHardware)
+        if (foreign)
+        {
+            // Only tentacles of that vendor whose own self-test passed: the server's test
+            // (HardwareOk) says nothing about them.
+            sharing = sharing.Where(n => n.ForeignHardwareOk && n.Gpu is { } gpu && string.Equals(gpu.Vendor, vendor, StringComparison.Ordinal)).ToArray();
+            if (sharing.Length == 0)
+            {
+                return new PlacementDecision(null, "no-hardware-tentacle", policy);
+            }
+        }
+        else if (analysis.UsesHardware)
         {
             // The self-test proved the server's own hardware type works there; the vendor
             // check is the safety net for command lines that name theirs (h264_qsv, driver=iHD).
@@ -157,7 +193,89 @@ public static class Scheduler
 
         return mode == PlacementMode.DryRun
             ? new PlacementDecision(null, "dry-run", policy, best.Name)
-            : new PlacementDecision(best, "least-loaded", policy);
+            : new PlacementDecision(best, foreign ? CrossVendorReason(best.Gpu!) : "least-loaded", policy);
+    }
+
+    /// <summary>
+    /// Whether a hardware job's command line is for another vendor's GPU than the
+    /// server's: one the host rebuilt for a tentacle (cross-vendor transcoding).
+    /// </summary>
+    /// <param name="analysis">The job's argv analysis.</param>
+    /// <param name="serverVendor">The vendor the server's command lines are for.</param>
+    /// <returns>True for a rebuilt command line.</returns>
+    public static bool IsForeignJob(ArgvAnalysis analysis, string? serverVendor)
+    {
+        ArgumentNullException.ThrowIfNull(analysis);
+        return analysis.UsesHardware
+            && analysis.HardwareVendor is { } vendor
+            && serverVendor is { Length: > 0 }
+            && !string.Equals(vendor, serverVendor, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The placement reason of a job rebuilt for a tentacle's GPU: <c>cross-vendor:amd-vaapi</c>.
+    /// </summary>
+    /// <param name="gpu">The GPU it was rebuilt for.</param>
+    /// <returns>The reason.</returns>
+    public static string CrossVendorReason(GpuInfo gpu)
+    {
+        ArgumentNullException.ThrowIfNull(gpu);
+        return $"cross-vendor:{gpu.Vendor}-{gpu.Api}";
+    }
+
+    /// <summary>
+    /// Picks the tentacle with another vendor's GPU that should take a hardware job,
+    /// when the host can rebuild its command line for it: one of the vendors the job
+    /// could not otherwise use, whose own self-test passed, that shares the job's paths,
+    /// has room, and beats where the job would go anyway (its tentacle or this server).
+    /// </summary>
+    /// <param name="analysis">The analysis of the command line the server built.</param>
+    /// <param name="mode">The placement mode.</param>
+    /// <param name="nodes">The connected tentacles.</param>
+    /// <param name="local">This server's seat, when it competes for jobs.</param>
+    /// <param name="serverVendor">The vendor the server's command lines are for.</param>
+    /// <param name="canTake">Whether the host can rebuild this job for a tentacle (its codecs, its pipeline).</param>
+    /// <returns>The tentacle, or null to leave the job as the server built it.</returns>
+    public static TentacleNode? PlaceForeign(ArgvAnalysis analysis, PlacementMode mode, IReadOnlyCollection<TentacleNode> nodes, LocalSeat? local, string? serverVendor, Func<TentacleNode, bool> canTake)
+    {
+        ArgumentNullException.ThrowIfNull(analysis);
+        ArgumentNullException.ThrowIfNull(nodes);
+        ArgumentNullException.ThrowIfNull(canTake);
+        var policy = PolicyFor(analysis.Kind);
+        if (mode == PlacementMode.Disabled || analysis.Kind != JobKind.Transcode || !analysis.UsesHardware || analysis.UsesLoopback || serverVendor is not { Length: > 0 })
+        {
+            return null;
+        }
+
+        var best = nodes
+            .Where(n => n.IsSchedulable && n.ForeignHardwareOk && n.Gpu is { } gpu && !string.Equals(gpu.Vendor, serverVendor, StringComparison.Ordinal))
+            .Where(n => n.Covers(analysis.Paths) && n.CanAccept(policy.Cost, policy.Background) && canTake(n))
+            .OrderBy(n => Math.Round(n.ScoreWith(policy.Cost), 9))
+            .ThenBy(n => n.LastTurn)
+            .ThenBy(n => n.Name, StringComparer.Ordinal)
+            .FirstOrDefault();
+        if (best is null)
+        {
+            return null;
+        }
+
+        // Where the job would go as built: in shadow mode a decision names no node, so
+        // compare with an active placement.
+        var regular = Place(analysis, PlacementMode.Active, nodes, local, serverVendor);
+        if (regular.Node is { } other)
+        {
+            return Wins(best.ScoreWith(policy.Cost), best.LastTurn, other.ScoreWith(policy.Cost), other.LastTurn) ? best : null;
+        }
+
+        // Otherwise it runs here: chosen on load, or for want of a tentacle with the
+        // server's GPU. When this server competes for jobs it keeps them on load and
+        // ties; when it is only the backup, the foreign GPU takes it.
+        if (local?.ScoreWith(policy.Cost, policy.Background) is { } here)
+        {
+            return Wins(best.ScoreWith(policy.Cost), best.LastTurn, here, local.LastTurn) ? best : null;
+        }
+
+        return best;
     }
 
     private static bool Wins(double here, long hereTurn, double best, long bestTurn)

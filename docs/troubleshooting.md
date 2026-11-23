@@ -11,6 +11,15 @@
     that passed the self-test;
   * `all-busy`, `background-slots-full`: raise `TENTACLE_MAX_JOBS` /
     `TENTACLE_MAX_BACKGROUND_JOBS`, or add tentacles.
+  * `cross-vendor:<vendor>-<api>`: rebuilt for a tentacle with another vendor's GPU
+    (experimental setting, Active). The job's details show the command line Jellyfin
+    built and the one that ran. In Shadow the job keeps its usual reason, and its
+    details show the command line it would have been rebuilt to. `tentacle_cross_vendor_total{outcome=~"skipped:.*"}` says why a
+    transcode was not rebuilt; `no-match` after a Jellyfin upgrade means Jellyfin
+    changed how it writes the command line, and the job simply stays as built.
+  * `cross-vendor-mismatch`: refused. A shim's command line for a rebuilt transcode was
+    not the one the plugin recorded for that output, so neither the tentacle nor this
+    server ran it. The server log names the tentacle.
 * **A tentacle never shows up.** Its log has `[tentacle]` lines saying why: wrong
   fingerprint, refused token (401), unreachable port 8097, or a `ws://` URL.
 * **A tentacle is Degraded.** Expand its checks: a `root:<path>` check that fails means

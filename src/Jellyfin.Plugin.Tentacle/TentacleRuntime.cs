@@ -83,6 +83,8 @@ public sealed partial class TentacleRuntime : IAsyncDisposable
             ServerUid = PeerCredentials.CurrentUid,
             SharedRoots = SharedRoots,
             HardwareTest = () => BuildHardwareTest(_configurationManager.GetEncodingOptions()),
+            ForeignHardwareTest = ForeignHardwareTest,
+            CrossVendor = config.CrossVendorMode,
             Attribute = attributor.Attribute,
         };
 
@@ -121,6 +123,15 @@ public sealed partial class TentacleRuntime : IAsyncDisposable
     public bool MetricsEnabled => _configurationManager.Configuration.EnableMetrics;
 
     private static PluginConfiguration Config => Plugin.Instance?.Configuration ?? new PluginConfiguration();
+
+    // Only where the plugin rebuilds transcodes for other vendors (Jellyfin 12, setting on):
+    // otherwise such a tentacle takes the jobs that use no hardware, as before.
+    private static HardwareTest? ForeignHardwareTest(GpuInfo gpu)
+#if NET10_0_OR_GREATER
+        => Config.CrossVendorMode != PlacementMode.Disabled ? BuildForeignHardwareTest(gpu) : null;
+#else
+        => null;
+#endif
 
     /// <summary>
     /// Starts the broker.
@@ -302,6 +313,33 @@ public sealed partial class TentacleRuntime : IAsyncDisposable
         : $"vaapi=va:{renderNode},driver=iHD,kernel_driver=i915";
 
     /// <summary>
+    /// The self-test for a tentacle's GPU of another vendor than the server's, in its
+    /// own hardware type (VAAPI on its device, or NVENC), as for a server configured
+    /// that way with hardware encoding on.
+    /// </summary>
+    /// <param name="gpu">The tentacle's GPU.</param>
+    /// <returns>The test, or null for a GPU Tentacle does not rebuild transcodes for.</returns>
+    public static HardwareTest? BuildForeignHardwareTest(GpuInfo gpu)
+    {
+        ArgumentNullException.ThrowIfNull(gpu);
+        if (gpu.Problem() is not null)
+        {
+            // GPU facts that no real probe produces: no test, so the tentacle stays CPU-only.
+            return null;
+        }
+
+        HardwareAccelerationType? type = gpu.Api switch
+        {
+            "vaapi" when Hardware.IsRenderNode(gpu.Device) => HardwareAccelerationType.vaapi,
+            "nvenc" => HardwareAccelerationType.nvenc,
+            _ => null,
+        };
+        return type is { } t
+            ? BuildHardwareTest(new EncodingOptions { HardwareAccelerationType = t, VaapiDevice = gpu.Device, EnableHardwareEncoding = true })
+            : null;
+    }
+
+    /// <summary>
     /// The hardware self-test for the server's encoding settings: initialise the same
     /// device type Jellyfin will use and push a few frames through it (and through
     /// the hardware H.264 encoder when hardware encoding is on).
@@ -467,6 +505,7 @@ public sealed partial class TentacleRuntime : IAsyncDisposable
             Options.LocalWeight = config.LocalWeight > 0 ? config.LocalWeight : 1;
             Options.LocalFallback = config.LocalFallback;
             Options.MetricsNameViewers = config.MetricsNameViewers;
+            Options.CrossVendor = config.CrossVendorMode;
             Options.VerifyInterval = TimeSpan.FromMinutes(Math.Max(1, config.VerifyIntervalMinutes));
             Broker.ReverifyAll();
         }

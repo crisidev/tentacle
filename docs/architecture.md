@@ -256,24 +256,50 @@ One image, a single layer (the mod loader applies only the first):
 oneshot that creates `/run/tentacle` (the agent's status file) for `abc`, and a
 `svc-jellyfin/run` replaced with `tentacle agent`, so Jellyfin never starts.
 
-## Not done yet: other GPU vendors for hardware jobs
+## Other GPU vendors: cross-vendor transcoding
 
 Jellyfin builds each ffmpeg command line for one hardware acceleration type, so a QSV
-command line cannot run on an NVIDIA GPU. Today a hardware job only goes to a tentacle
-with the server's GPU vendor; tentacles with other GPUs (or none) take everything that
-uses no hardware.
+command line cannot run on an NVIDIA GPU. A hardware job goes to a tentacle with the
+server's GPU vendor; tentacles with other GPUs (or none) take everything that uses no
+hardware. With the **Transcodes on tentacles with another vendor's GPU** setting
+(experimental, Jellyfin 12.1+; Off, Shadow or Active, never further than "Where jobs
+run"), playback transcodes can also go to an AMD (VAAPI) or
+NVIDIA (NVENC) tentacle of an Intel server, because Jellyfin builds them again for it:
 
-Translating command lines between vendors would mean reimplementing Jellyfin's
-`EncodingHelper` (device setup, hardware filters, tone mapping, subtitle overlays).
-The plan instead is to have Jellyfin build the command line for the chosen node:
+1. **Verification.** A tentacle whose GPU is another vendor's gets a self-test of its
+   own hardware type (`BrokerOptions.ForeignHardwareTest`), recorded as
+   `ForeignHardwareOk`, separate from `HardwareOk`: the server's own command lines never
+   go there.
+2. **Before the transcode starts.** The plugin wraps Jellyfin's `ITranscodeManager`.
+   In `StartFfMpeg` it asks the broker whether a foreign tentacle should take the job
+   (`Scheduler.PlaceForeign`: its own test passed, it shares the job's paths, encodes
+   the output codec in hardware, and beats where the job would go anyway on load; ties
+   keep the job as built).
+3. **Rebuilding, with Jellyfin's own code.** The command line is rebuilt with
+   Jellyfin's `EncodingHelper`, the server's (from dependency injection) and a second
+   one that sees the tentacle's GPU: a media encoder wrapper reporting its VAAPI facts
+   (`WorkerMediaEncoder`) and the server's encoding settings with the tentacle's
+   hardware type, device and measured codecs (`WorkerEncodingOptions`). Nothing that
+   does not depend on the GPU changes.
+4. **Checked, not guessed.** A progressive transcode's whole command line must equal
+   what `EncodingHelper` builds with the server's settings. An HLS command line is
+   assembled in Jellyfin's API, so each GPU-dependent part (input options, input and
+   hardware setup, threads, filter maps, encoder, quality, keyframes, filters) is built
+   with the server's settings, must occur exactly once and in order in the command line
+   Jellyfin actually built, and is replaced by the tentacle's. Anything that does not
+   match (another Jellyfin version, a pipeline this does not know), HDR sources (tone
+   mapping takes other filters per vendor) and stream copies stay as built
+   (`tentacle_cross_vendor_total{outcome="skipped:..."}`).
+5. **Placement.** The plugin leaves the broker a note keyed by the output path. The
+   rebuilt job only goes to that tentacle (or one with the same vendor and device),
+   placement reason `cross-vendor:<vendor>-<api>`; with no room it is refused rather
+   than run on this server, whose GPU cannot. In shadow (its own setting, or "Where jobs
+   run") the original runs, placed by the usual rules, and the job record carries the
+   rebuilt command line (`RewrittenCommand`, `RewrittenFor`).
 
-- choose the node for each playback at its first streaming request (a middleware keyed
-  on the `PlaySessionId`);
-- during that request, wrap `IServerConfigurationManager` and `IMediaEncoder` so
-  `EncodingHelper` sees the chosen node's encoding profile: hardware type, device,
-  decoding codecs, tone mapping, the vendor's device flags;
-- use a placeholder device path the agent swaps for its real render node;
-- fail over within the same vendor family.
-
-Everything Jellyfin needs for this already comes through dependency injection in 12.1.
-Contributions and testing on NVIDIA and AMD hardware are welcome.
+Not covered yet: trickplay, subtitle and attachment extraction and audio analysis
+(Jellyfin builds those inside `MediaEncoder`, a different hook), HDR sources, Jellyfin
+10.11, and Intel tentacles of an AMD or NVIDIA server (Intel tentacles report QSV, which
+is not a rebuild target). The earlier plan, choosing the node at a playback's first
+streaming request and wrapping Jellyfin's configuration for that request, would also
+cover the jobs `MediaEncoder` builds. Testing on NVIDIA and AMD hardware is welcome.

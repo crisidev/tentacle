@@ -1,4 +1,5 @@
 using System;
+using System.Text.Json.Serialization;
 using MediaBrowser.Model.Plugins;
 using Tentacle.Broker;
 using Tentacle.Protocol;
@@ -123,4 +124,50 @@ public class PluginConfiguration : BasePluginConfiguration
     /// /metrics would see who watches what.
     /// </summary>
     public bool MetricsNameViewers { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether playback transcodes may go to tentacles with another
+    /// vendor's GPU than the server's (an AMD or NVIDIA tentacle of an Intel server),
+    /// Jellyfin building the transcode again for that GPU, and only when the result
+    /// checks out. Disabled (off, the default), DryRun (shadow: the rebuilt command line
+    /// is recorded, the job runs as Jellyfin built it) or Active. It never goes further
+    /// than <see cref="Placement"/>. Jellyfin 12.1 and later; experimental.
+    /// </summary>
+    public PlacementMode CrossVendorMode { get; set; } = PlacementMode.Disabled;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether cross-vendor transcoding was on in its
+    /// earlier on/off form: read from configuration files written before
+    /// <see cref="CrossVendorMode"/>, never written again. <see cref="MigrateLegacy"/>
+    /// turns true into shadow, not active.
+    /// </summary>
+    [JsonIgnore]
+    public bool CrossVendor { get; set; }
+
+    /// <summary>
+    /// Tells the XML serializer never to write <see cref="CrossVendor"/>.
+    /// </summary>
+    /// <returns>False.</returns>
+    public bool ShouldSerializeCrossVendor() => false;
+
+    /// <summary>
+    /// Moves settings from their earlier forms: the on/off cross-vendor switch becomes
+    /// shadow mode (on never meant running rebuilt transcodes without a trial first).
+    /// </summary>
+    /// <returns>True when something changed and the configuration should be saved.</returns>
+    public bool MigrateLegacy()
+    {
+        if (!CrossVendor)
+        {
+            return false;
+        }
+
+        CrossVendor = false;
+        if (CrossVendorMode == PlacementMode.Disabled)
+        {
+            CrossVendorMode = PlacementMode.DryRun;
+        }
+
+        return true;
+    }
 }

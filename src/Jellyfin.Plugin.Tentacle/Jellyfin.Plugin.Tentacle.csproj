@@ -24,6 +24,11 @@
     <ProjectReference Include="../Tentacle.Broker/Tentacle.Broker.csproj" />
   </ItemGroup>
 
+  <!-- Cross-vendor transcoding drives Jellyfin 12's EncodingHelper; the 10.11 build leaves it out. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
+    <Compile Remove="CrossVendor/**" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Remove="Configuration\configPage.html" />
     <EmbeddedResource Include="Configuration\configPage.html" />

@@ -183,6 +183,14 @@ public sealed class TentacleNode
     /// <summary>Gets a value indicating whether the hardware self-test passed.</summary>
     public bool HardwareOk { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether this tentacle's own GPU passed a self-test of its
+    /// own hardware type, when that is not the server's (an AMD tentacle of an Intel
+    /// server). Only command lines rebuilt for this GPU may use it; the server's own
+    /// hardware command lines still need <see cref="HardwareOk"/>.
+    /// </summary>
+    public bool ForeignHardwareOk { get; private set; }
+
     /// <summary>Gets a value indicating whether the ffmpeg build rules this tentacle out.</summary>
     public bool Incompatible { get; private set; }
 
@@ -389,12 +397,14 @@ public sealed class TentacleNode
     /// <param name="verifiedRoots">The roots that proved shared.</param>
     /// <param name="hardwareOk">Whether the hardware test passed.</param>
     /// <param name="incompatible">Whether the ffmpeg build rules the node out.</param>
-    public void ApplyVerification(IReadOnlyList<NodeCheck> checks, IReadOnlyList<string> verifiedRoots, bool hardwareOk, bool incompatible)
+    /// <param name="foreignHardwareOk">Whether its own GPU, of another vendor than the server's, passed its own self-test.</param>
+    public void ApplyVerification(IReadOnlyList<NodeCheck> checks, IReadOnlyList<string> verifiedRoots, bool hardwareOk, bool incompatible, bool foreignHardwareOk = false)
     {
         ArgumentNullException.ThrowIfNull(checks);
         Checks = DetectOnly ? checks.Select(c => c with { Required = false }).ToArray() : checks;
         VerifiedRoots = verifiedRoots;
         HardwareOk = hardwareOk;
+        ForeignHardwareOk = foreignHardwareOk;
         Incompatible = incompatible;
         VerifiedAt = _clock();
         NeedsVerify = false;

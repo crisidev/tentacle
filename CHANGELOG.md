@@ -3,6 +3,34 @@
 Every artifact (the plugin, the `tentacle` binary and the worker mod image) shares one
 version. The plugin's own changelog in `build.yaml` carries the latest entry.
 
+## 2.1.0-beta1
+
+A pre-release: GitHub's "latest" release (and so the plugin repository URL) stays on
+2.0.3, and Jellyfin will not offer it. Install it by hand from its release page. The
+plugin inside is version 2.1.0.1 (2.1.0.0 for Jellyfin 10.11), the same as the final
+2.1.0 will be, so moving a beta install to 2.1.0 is by hand too.
+
+- Experimental, Jellyfin 12.1+, Off by default: **cross-vendor transcoding**, with its
+  own Off / Shadow / Active setting that never goes further than "Where jobs run" (the
+  lesser of the two applies, and the dashboard says which one limits it). In Shadow the
+  rebuilt command line is recorded while the job runs as Jellyfin built it, placed by
+  the usual rules, even when jobs otherwise run for real. A tentacle
+  whose GPU is another vendor's than the server's (AMD or NVIDIA for an Intel server) is
+  tested with its own hardware type (VAAPI, NVENC), and playback transcodes of SDR
+  sources may go there: the plugin rebuilds the transcode with Jellyfin's own
+  `EncodingHelper` for that GPU, and only when every GPU-dependent part of the command
+  line Jellyfin built is found exactly as expected. Anything else stays as built. New metric
+  `tentacle_cross_vendor_total`, placement reason `cross-vendor:<vendor>-<api>`.
+  Trickplay, extraction, audio analysis and HDR sources keep the same-vendor rule.
+  A tentacle's GPU facts are untrusted input there: malformed ones are dropped (the
+  tentacle stays CPU-only), a rebuilt command line must equal Jellyfin's except for the
+  GPU's options, and the broker refuses a shim whose command line is not the recorded
+  rebuild. The tentacle's VAAPI render node is always named in its command line:
+  Jellyfin only writes it when that device file exists on the server.
+- Unknown placement modes (a number posted to the configuration API) count as Off.
+- Releases can be pre-releases (`X.Y.Z-suffix`): assembly and plugin versions take the
+  numeric part, the zips, images and reported version the full one.
+
 ## 2.0.3
 
 - Jellyfin's installed-plugins list shows the build's full version, as the catalog does:
