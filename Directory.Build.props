@@ -5,7 +5,7 @@
     protocol. CI overrides it with -p:Version=x.y.z.
   -->
   <PropertyGroup>
-    <Version>2.1.0</Version>
+    <Version>2.2.0</Version>
     <AssemblyVersion>$(Version).0</AssemblyVersion>
     <FileVersion>$(Version).0</FileVersion>
     <!--

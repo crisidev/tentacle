@@ -3,7 +3,12 @@
 Every artifact (the plugin, the `tentacle` binary and the worker mod image) shares one
 version. The plugin's own changelog in `build.yaml` carries the latest entry.
 
-## Unreleased
+## 2.2.0-beta1
+
+A pre-release: GitHub's "latest" release (and so the plugin repository URL) stays on
+2.1.0, and Jellyfin will not offer it. Install it by hand from its release page. The
+plugin inside is version 2.2.0.1 (2.2.0.0 for Jellyfin 10.11), the same as the final
+2.2.0 will be, so moving a beta install to 2.2.0 is by hand too.
 
 - Cross-vendor transcoding covers **trickplay** too (same Off / Shadow / Active setting):
   a trickplay job may run on a tentacle with another vendor's GPU, within its background
