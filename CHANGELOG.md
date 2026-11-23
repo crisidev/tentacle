@@ -3,12 +3,11 @@
 Every artifact (the plugin, the `tentacle` binary and the worker mod image) shares one
 version. The plugin's own changelog in `build.yaml` carries the latest entry.
 
-## 2.2.0-beta1
+## 2.2.0
 
-A pre-release: GitHub's "latest" release (and so the plugin repository URL) stays on
-2.1.0, and Jellyfin will not offer it. Install it by hand from its release page. The
-plugin inside is version 2.2.0.1 (2.2.0.0 for Jellyfin 10.11), the same as the final
-2.2.0 will be, so moving a beta install to 2.2.0 is by hand too.
+Tried first as 2.2.0-beta1, a pre-release. A beta install carries the same plugin
+version as this release (2.2.0.1, 2.2.0.0 for Jellyfin 10.11), so Jellyfin does not
+replace it: install 2.2.0 by hand once, then it updates itself as before.
 
 - Cross-vendor transcoding covers **trickplay** too (same Off / Shadow / Active setting):
   a trickplay job may run on a tentacle with another vendor's GPU, within its background
@@ -18,6 +17,9 @@ plugin inside is version 2.2.0.1 (2.2.0.0 for Jellyfin 10.11), the same as the f
   exactly the prediction, output directory aside. Anything else runs as Jellyfin built
   it; a tentacle gone by then means the server's own command line runs.
 - `tentacle_cross_vendor_total` has a `kind` label (`Transcode`, `Trickplay`).
+- On AMD tentacles (VAAPI has no JPEG encoder there) Jellyfin's trickplay rebuild
+  decodes and scales on the GPU and encodes the JPEG tiles on the CPU, so it is slower
+  than an Intel tentacle's (about 2× in a first trial), at background priority.
 
 ## 2.1.0
 
