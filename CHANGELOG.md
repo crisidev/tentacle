@@ -3,7 +3,12 @@
 Every artifact (the plugin, the `tentacle` binary and the worker mod image) shares one
 version. The plugin's own changelog in `build.yaml` carries the latest entry.
 
-## Unreleased
+## 2.1.0-beta1
+
+A pre-release: GitHub's "latest" release (and so the plugin repository URL) stays on
+2.0.3, and Jellyfin will not offer it. Install it by hand from its release page. The
+plugin inside is version 2.1.0.1 (2.1.0.0 for Jellyfin 10.11), the same as the final
+2.1.0 will be, so moving a beta install to 2.1.0 is by hand too.
 
 - Experimental, Jellyfin 12.1+, Off by default: **cross-vendor transcoding**, with its
   own Off / Shadow / Active setting that never goes further than "Where jobs run" (the
@@ -20,7 +25,11 @@ version. The plugin's own changelog in `build.yaml` carries the latest entry.
   A tentacle's GPU facts are untrusted input there: malformed ones are dropped (the
   tentacle stays CPU-only), a rebuilt command line must equal Jellyfin's except for the
   GPU's options, and the broker refuses a shim whose command line is not the recorded
-  rebuild.
+  rebuild. The tentacle's VAAPI render node is always named in its command line:
+  Jellyfin only writes it when that device file exists on the server.
+- Unknown placement modes (a number posted to the configuration API) count as Off.
+- Releases can be pre-releases (`X.Y.Z-suffix`): assembly and plugin versions take the
+  numeric part, the zips, images and reported version the full one.
 
 ## 2.0.3
 

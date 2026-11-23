@@ -15,6 +15,12 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 
 version="${TENTACLE_VERSION:-$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props)}"
+# Assembly and Jellyfin plugin versions take numbers only, so a pre-release
+# (2.1.0-beta1) is built as 2.1.0.x there; the full version names the zips, the
+# images and the informational version. Jellyfin then sees a beta and its final
+# release as the same version: moving a beta install to the final is by hand.
+numeric="${version%%-*}"
+[[ "${numeric}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "build: version ${version} is not X.Y.Z or X.Y.Z-suffix" >&2; exit 2; }
 # The plugin, once per Jellyfin line: line:framework:targetAbi:revision. The
 # revision is the plugin version's 4th part, so the two builds of a release have
 # different versions and Jellyfin installs the newest one it can load.
@@ -33,7 +39,7 @@ else
     dn_cross=(env TENTACLE_DOTNET=docker TENTACLE_SDK_IMAGE=tentacle-sdk-cross:10.0 scripts/dotnet.sh)
 fi
 read -r -a arches <<<"${TENTACLE_ARCHES:-amd64 arm64}"
-vprops=(-p:Version="${version}" -p:AssemblyVersion="${version}.0" -p:FileVersion="${version}.0")
+vprops=(-p:Version="${version}" -p:AssemblyVersion="${numeric}.0" -p:FileVersion="${numeric}.0")
 
 do_test() {
     "${dn[@]}" test --solution Tentacle.slnx -c Release "${vprops[@]}"
@@ -69,11 +75,11 @@ do_plugin() {
         out="dist/plugin/jellyfin-${line}"
         # Jellyfin's installed-plugins list shows the DLL's AssemblyVersion, not
         # meta.json's: stamp this build's revision (.1 for 12, .0 for 10.11) so it
-        # matches the catalog. The later -p wins over vprops' ${version}.0; the
+        # matches the catalog. The later -p wins over vprops' ${numeric}.0; the
         # version the plugin reports at runtime is the informational one, X.Y.Z.
         "${dn[@]}" publish src/Jellyfin.Plugin.Tentacle/Jellyfin.Plugin.Tentacle.csproj \
             -c Release -f "${framework}" -o dist/plugin-raw "${vprops[@]}" \
-            -p:AssemblyVersion="${version}.${revision}" -p:FileVersion="${version}.${revision}"
+            -p:AssemblyVersion="${numeric}.${revision}" -p:FileVersion="${numeric}.${revision}"
         mkdir -p "${out}"
         for a in "${assemblies[@]}"; do cp "dist/plugin-raw/${a}" "${out}/"; done
         for arch in amd64 arm64; do
@@ -94,7 +100,7 @@ do_plugin() {
   "owner": "crisidev",
   "targetAbi": "${abi}",
   "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "version": "${version}.${revision}",
+  "version": "${numeric}.${revision}",
   "status": "Active",
   "autoUpdate": true,
   "assemblies": [$(printf '"%s",' "${assemblies[@]}" | sed 's/,$//')]
@@ -103,7 +109,7 @@ JSON
         zip_file="tentacle_${version}_jellyfin-${line}.zip"
         (cd "${out}" && zip -q "../../${zip_file}" ./*.dll ./tentacle-* meta.json)
         rm -rf dist/plugin-raw
-        echo "plugin: dist/${zip_file} (Jellyfin ${line}, version ${version}.${revision})"
+        echo "plugin: dist/${zip_file} (Jellyfin ${line}, version ${numeric}.${revision})"
     done
 }
 
@@ -162,7 +168,7 @@ do_mod() {
     for build in "${plugin_builds[@]}"; do
         IFS=: read -r line _ _ revision <<<"${build}"
         tag="${image}:server-${version}$([[ "${line}" == 12 ]] || echo "-${line}")"
-        plugin_dir="dist/e2e-server/config/data/plugins/Tentacle_${version}.${revision}"
+        plugin_dir="dist/e2e-server/config/data/plugins/Tentacle_${numeric}.${revision}"
         rm -rf dist/e2e-server && mkdir -p "${plugin_dir}"
         unzip -q "dist/tentacle_${version}_jellyfin-${line}.zip" -d "${plugin_dir}"
         printf 'FROM scratch\nCOPY config /config\n' | docker build -q -f - -t "${tag}" dist/e2e-server >/dev/null
