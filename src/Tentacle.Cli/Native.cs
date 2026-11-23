@@ -38,7 +38,7 @@ internal static unsafe partial class Native
         var handles = new GCHandle[argv.Count];
         try
         {
-            var pointers = new IntPtr[argv.Count + 1];
+            var pointers = new nint[argv.Count + 1];
             for (var i = 0; i < argv.Count; i++)
             {
                 handles[i] = GCHandle.Alloc(buffers[i], GCHandleType.Pinned);
@@ -47,7 +47,7 @@ internal static unsafe partial class Native
 
             fixed (byte* p = pathBytes)
             {
-                fixed (IntPtr* a = pointers)
+                fixed (nint* a = pointers)
                 {
                     _ = ExecV(p, (byte**)a);
                 }
@@ -102,7 +102,7 @@ internal static unsafe partial class Native
     /// </summary>
     private static void ResetSignalsForExec()
     {
-        _ = Signal(SigPipe, IntPtr.Zero); // SIG_DFL
+        _ = Signal(SigPipe, 0); // SIG_DFL
         var emptySet = stackalloc byte[128]; // sizeof(sigset_t) on glibc
         new Span<byte>(emptySet, 128).Clear();
         _ = SigProcMask(SigSetMask, emptySet, null);
@@ -129,7 +129,7 @@ internal static unsafe partial class Native
 
         try
         {
-            return Marshal.PtrToStringUTF8((IntPtr)resolved);
+            return Marshal.PtrToStringUTF8((nint)resolved);
         }
         finally
         {
@@ -174,7 +174,7 @@ internal static unsafe partial class Native
 
     [LibraryImport("libc", EntryPoint = "signal")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
-    private static partial IntPtr Signal(int signum, IntPtr handler);
+    private static partial nint Signal(int signum, nint handler);
 
     [LibraryImport("libc", EntryPoint = "sigprocmask")]
     [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
