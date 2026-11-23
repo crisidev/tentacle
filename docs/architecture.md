@@ -297,9 +297,23 @@ NVIDIA (NVENC) tentacle of an Intel server, because Jellyfin builds them again f
    run") the original runs, placed by the usual rules, and the job record carries the
    rebuilt command line (`RewrittenCommand`, `RewrittenFor`).
 
-Not covered yet: trickplay, subtitle and attachment extraction and audio analysis
-(Jellyfin builds those inside `MediaEncoder`, a different hook), HDR sources, Jellyfin
-10.11, and Intel tentacles of an AMD or NVIDIA server (Intel tentacles report QSV, which
-is not a rebuild target). The earlier plan, choosing the node at a playback's first
-streaming request and wrapping Jellyfin's configuration for that request, would also
-cover the jobs `MediaEncoder` builds. Testing on NVIDIA and AMD hardware is welcome.
+**Trickplay** is built and started inside Jellyfin's media encoder
+(`ExtractVideoImagesOnIntervalAccelerated`), with a fresh output directory per run, so the
+plugin cannot hand Jellyfin a rebuilt command line. Its media encoder wrapper predicts
+instead, just before Jellyfin starts the job: the same public `EncodingHelper` calls
+(`GetVideoEncoder`, `GetInputArgument`, `GetVideoProcessingFilterParam`) and formatting
+Jellyfin 12 uses (`TrickplayCommand`), once with the server's settings and once with the
+tentacle's (Jellyfin picks the pipeline: for an AMD GPU without a VAAPI JPEG encoder,
+VAAPI decode and scaling, then a software `mjpeg`). With key-frame-only extraction both
+attempts Jellyfin makes are predicted. The broker gets the prediction and the rebuild,
+and swaps them only for a shim whose command line is the prediction token for token,
+apart from an output `<temp>/<32 hex>/%08d.jpg` right below Jellyfin's temp directory:
+a Jellyfin whose trickplay differs gets no swap (`skipped:no-match`). The rebuild passes
+the same whole-command check as a transcode and runs on its tentacle within its
+background slots. If that tentacle is gone by the time Jellyfin starts the job, the
+server's own command line, still at hand, runs instead (`skipped:unavailable`). Shadow
+records the rebuild in the job's details.
+
+Not covered yet: subtitle and attachment extraction and audio analysis (they use no GPU,
+so any tentacle already takes them), HDR sources, Jellyfin 10.11, and Intel tentacles of an AMD or NVIDIA server (Intel tentacles report QSV, which
+is not a rebuild target). Testing on NVIDIA and AMD hardware is welcome.

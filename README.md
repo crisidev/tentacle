@@ -69,8 +69,8 @@ one.
   Intel, NVIDIA with NVIDIA). Tentacles with another GPU, or none, still take
   everything else: remuxes, audio, subtitles, software encodes. With **cross-vendor
   transcoding** (experimental, Jellyfin 12.1+, off by default), playback transcodes of
-  SDR sources can also run on AMD (VAAPI) or NVIDIA (NVENC) tentacles of an Intel
-  server: Jellyfin builds them again for that GPU
+  SDR sources and trickplay can also run on AMD (VAAPI) or NVIDIA (NVENC) tentacles of an
+  Intel server: Jellyfin builds them again for that GPU
   ([how](docs/architecture.md#other-gpu-vendors-cross-vendor-transcoding)).
 * Hardware transcoding is tested on Intel (QSV and VAAPI). AMD and NVIDIA are detected
   but not yet tested for real jobs; reports are very welcome.
@@ -152,9 +152,9 @@ Every setting is described in [docs/configuration.md](docs/configuration.md).
 * ✅ GPU detection, one tentacle per GPU, arm64
 * ✅ The server as a backup, a worker, or neither
 * 🧪 Hardware transcodes on any GPU vendor: Jellyfin builds each job for the GPU that
-  runs it. Experimental for playback transcodes
-  ([how](docs/architecture.md#other-gpu-vendors-cross-vendor-transcoding)); HDR,
-  trickplay and extraction still need the server's vendor
+  runs it. Experimental for playback transcodes and trickplay
+  ([how](docs/architecture.md#other-gpu-vendors-cross-vendor-transcoding)); HDR sources
+  still need the server's vendor
 * ✅ A Jellyfin plugin repository: the server needs no mod
 * 🌍 Worker weights measured automatically
 

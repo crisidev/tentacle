@@ -141,8 +141,10 @@ this server's GPU cannot. That is Active. In Shadow, the same decision is made a
 rebuilt command line recorded (the job's details, `tentacle_cross_vendor_total{outcome="shadow"}`),
 but the job runs exactly as Jellyfin built it, placed by the usual rules, even while
 "Where jobs run" is Active: a safe way to check rebuilt command lines against real
-hardware first. The effective mode is the lesser of the two settings. Trickplay,
-extraction and audio analysis keep the rules above.
+hardware first. The effective mode is the lesser of the two settings. Trickplay follows
+the same setting: Jellyfin's trickplay command line, built again for the tentacle's GPU,
+runs there within its background slots (or, in Shadow, is shown in the job's details).
+Subtitle and attachment extraction and audio analysis use no GPU: any tentacle takes them.
 
 `TENTACLE_MAX_JOBS=0` makes a detect-only tentacle: a cheap way to see what a machine's
 GPU can do, from the dashboard, without giving it any work.

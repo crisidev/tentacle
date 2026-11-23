@@ -3,6 +3,17 @@
 Every artifact (the plugin, the `tentacle` binary and the worker mod image) shares one
 version. The plugin's own changelog in `build.yaml` carries the latest entry.
 
+## Unreleased
+
+- Cross-vendor transcoding covers **trickplay** too (same Off / Shadow / Active setting):
+  a trickplay job may run on a tentacle with another vendor's GPU, within its background
+  slots. Jellyfin builds and starts trickplay inside its media encoder, so the plugin
+  predicts the command line (the same `EncodingHelper` calls, with the server's settings
+  and with the tentacle's), and the broker runs the rebuild only for a shim that brings
+  exactly the prediction, output directory aside. Anything else runs as Jellyfin built
+  it; a tentacle gone by then means the server's own command line runs.
+- `tentacle_cross_vendor_total` has a `kind` label (`Transcode`, `Trickplay`).
+
 ## 2.1.0
 
 Tried first as 2.1.0-beta1, a pre-release. A beta install carries the same plugin

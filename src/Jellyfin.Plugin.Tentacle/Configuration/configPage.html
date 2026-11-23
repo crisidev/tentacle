@@ -212,7 +212,7 @@
                                     <option value="DryRun">Shadow: record the rebuilt command line, run the job as Jellyfin built it</option>
                                     <option value="Active">Active: run rebuilt transcodes on those tentacles</option>
                                 </select>
-                                <div class="fieldDescription">A tentacle whose GPU is from another vendor than this server's (AMD or NVIDIA for an Intel server) is tested with its own hardware (VAAPI or NVENC), and playback transcodes may go there: Jellyfin builds the transcode again for that GPU, and only when every part of it checks out. HDR sources, trickplay and extraction keep the usual rules. In shadow, jobs run and are placed as usual, and their details show the command line they would have used. It never goes further than "Where jobs run". Jellyfin 12.1 and later. <span id="CrossVendorEffective" class="t-when"></span></div>
+                                <div class="fieldDescription">A tentacle whose GPU is from another vendor than this server's (AMD or NVIDIA for an Intel server) is tested with its own hardware (VAAPI or NVENC), and playback transcodes may go there: Jellyfin builds the transcode again for that GPU, and only when every part of it checks out. Trickplay is rebuilt the same way; HDR sources keep the usual rules. In shadow, jobs run and are placed as usual, and their details show the command line they would have used. It never goes further than "Where jobs run". Jellyfin 12.1 and later. <span id="CrossVendorEffective" class="t-when"></span></div>
                             </div>
                         </fieldset>
 
