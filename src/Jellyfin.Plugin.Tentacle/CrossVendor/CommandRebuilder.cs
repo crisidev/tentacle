@@ -152,7 +152,7 @@ public static partial class CommandRebuilder
                 // Jellyfin builds the whole command line in one public call: it must match exactly.
                 var expected = server.GetProgressiveVideoFullCommandLine(state, serverOptions, EncoderPreset.superfast);
                 return string.Equals(expected, original, StringComparison.Ordinal)
-                    ? new RebuildResult(worker.GetProgressiveVideoFullCommandLine(state, workerOptions, EncoderPreset.superfast), "rebuilt")
+                    ? new RebuildResult(PinVaapiDevice(worker.GetProgressiveVideoFullCommandLine(state, workerOptions, EncoderPreset.superfast), workerOptions), "rebuilt")
                     : RebuildResult.Skipped("no-match:command");
             case TranscodingJobType.Hls:
                 return Splice(original, HlsFragments(server, serverOptions, serverEncoder, worker, workerOptions, workerEncoder, state, original));
@@ -206,6 +206,29 @@ public static partial class CommandRebuilder
     }
 
     /// <summary>
+    /// Names the tentacle's render node in every <c>-init_hw_device vaapi=&lt;alias&gt;</c>
+    /// that has none. Jellyfin writes the node only when that file exists where it builds
+    /// the command line, which for a tentacle's command is the server: without this, a
+    /// tentacle whose GPU is not at a path the server also has (renderD129, or a server
+    /// with no /dev/dri) would get no device, and its ffmpeg would open the default one.
+    /// A node Jellyfin did write is left as it is. Only a validated render node is pinned.
+    /// </summary>
+    /// <param name="arguments">The tentacle's arguments, as Jellyfin built them.</param>
+    /// <param name="workerOptions">The settings for the tentacle's GPU.</param>
+    /// <returns>The arguments, with the render node named.</returns>
+    public static string PinVaapiDevice(string arguments, EncodingOptions workerOptions)
+    {
+        ArgumentNullException.ThrowIfNull(arguments);
+        ArgumentNullException.ThrowIfNull(workerOptions);
+        if (workerOptions.HardwareAccelerationType != HardwareAccelerationType.vaapi || !Hardware.IsRenderNode(workerOptions.VaapiDevice))
+        {
+            return arguments;
+        }
+
+        return VaapiDeviceWithoutNode().Replace(arguments, m => m.Groups[1].Value + ":" + workerOptions.VaapiDevice);
+    }
+
+    /// <summary>
     /// The GPU-dependent parts of an HLS transcode, in the order Jellyfin's HLS
     /// controller writes them: input options, input and hardware setup, threads, the
     /// streams the filters drop, the encoder, its quality and keyframe options, and the
@@ -222,7 +245,7 @@ public static partial class CommandRebuilder
         return
         [
             new("input-options", server.GetInputModifier(state, serverOptions, container), worker.GetInputModifier(state, workerOptions, container)),
-            new("input", server.GetInputArgument(state, serverOptions, container), worker.GetInputArgument(state, workerOptions, container)),
+            new("input", server.GetInputArgument(state, serverOptions, container), PinVaapiDevice(worker.GetInputArgument(state, workerOptions, container), workerOptions)),
             new("threads", Threads(state, serverOptions, serverEncoder), Threads(state, workerOptions, workerEncoder)),
             new("filter-maps", server.GetNegativeMapArgsByFilters(state, serverFilter), worker.GetNegativeMapArgsByFilters(state, workerFilter)),
             new("encoder", "-codec:v:0 " + serverEncoder, "-codec:v:0 " + workerEncoder),
@@ -254,4 +277,9 @@ public static partial class CommandRebuilder
 
     [GeneratedRegex(@"-start_number (\d+)")]
     private static partial Regex StartNumber();
+
+    // "vaapi=va" or "vaapi=va:" (then a space, a comma or the end): no render node.
+    // "vaapi=va:/dev/dri/renderD128" does not match.
+    [GeneratedRegex(@"(-init_hw_device vaapi=\w+):?(?=[\s,]|$)")]
+    private static partial Regex VaapiDeviceWithoutNode();
 }

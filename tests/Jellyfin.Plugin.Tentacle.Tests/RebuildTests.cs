@@ -187,6 +187,32 @@ public class RebuildTests
         Assert.Equal(Media, Assert.Single(analysis.Inputs).Replace("file:", string.Empty, StringComparison.Ordinal));
     }
 
+    [Theory]
+    // Jellyfin leaves the node out when the file does not exist where it builds the
+    // command (the server): renderD129 here, or a CI runner with no /dev/dri at all.
+    [InlineData("-f matroska -init_hw_device vaapi=va -filter_hw_device va", "-f matroska -init_hw_device vaapi=va:/dev/dri/renderD129 -filter_hw_device va")]
+    [InlineData("-init_hw_device vaapi=va:,vendor_id=0x1002 -hwaccel vaapi", "-init_hw_device vaapi=va:/dev/dri/renderD129,vendor_id=0x1002 -hwaccel vaapi")]
+    [InlineData("-x -init_hw_device vaapi=va", "-x -init_hw_device vaapi=va:/dev/dri/renderD129")]
+    // A node Jellyfin did write stays as it is.
+    [InlineData("-init_hw_device vaapi=va:/dev/dri/renderD129 -filter_hw_device va", "-init_hw_device vaapi=va:/dev/dri/renderD129 -filter_hw_device va")]
+    [InlineData("-i file:\"/data/movies/a.mkv\" -codec:v:0 libx264", "-i file:\"/data/movies/a.mkv\" -codec:v:0 libx264")]
+    public void TheTentaclesRenderNodeIsNamedWhateverTheServerHas(string built, string expected)
+    {
+        var options = new EncodingOptions { HardwareAccelerationType = HardwareAccelerationType.vaapi, VaapiDevice = "/dev/dri/renderD129" };
+        Assert.Equal(expected, CommandRebuilder.PinVaapiDevice(built, options));
+    }
+
+    [Theory]
+    [InlineData(HardwareAccelerationType.vaapi, "/dev/dri/renderD128 -i /etc/passwd")]
+    [InlineData(HardwareAccelerationType.vaapi, "../renderD128")]
+    [InlineData(HardwareAccelerationType.vaapi, "")]
+    [InlineData(HardwareAccelerationType.nvenc, "/dev/dri/renderD128")]
+    public void OnlyAValidatedVaapiRenderNodeIsPinned(HardwareAccelerationType type, string device)
+    {
+        const string Built = "-init_hw_device vaapi=va -filter_hw_device va";
+        Assert.Equal(Built, CommandRebuilder.PinVaapiDevice(Built, new EncodingOptions { HardwareAccelerationType = type, VaapiDevice = device }));
+    }
+
     [Fact]
     public void AProgressiveTranscodeIsRebuiltForAnAmdGpu()
     {
