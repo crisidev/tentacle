@@ -206,3 +206,52 @@ tests:
                 its jobs keep failing for infrastructure reasons (lost connection, attach
                 timeout, spawn errors), so it is benched and re-tested with growing pauses.
                 The Jellyfin log has "Tentacle tatooine" lines with the cause.
+
+  # Cross-vendor: trickplay candidates all skipped (a Jellyfin upgrade), transcodes
+  # still rebuilt; one transcode refused.
+  - interval: 1m
+    input_series:
+      - series: 'tentacle_cross_vendor_total{node="coruscant",outcome="skipped:no-match",kind="Trickplay"}'
+        values: '0+1x400'
+      - series: 'tentacle_cross_vendor_total{node="coruscant",outcome="skipped:error",kind="Transcode"}'
+        values: '0+1x400'
+      - series: 'tentacle_cross_vendor_total{node="coruscant",outcome="rebuilt",kind="Transcode"}'
+        values: '0+1x400'
+      - series: 'tentacle_cross_vendor_total{node="coruscant",outcome="refused:mismatch",kind="Transcode"}'
+        values: '0x300 1x100'
+    alert_rule_test:
+      - eval_time: 6h30m
+        alertname: TentacleCrossVendorNotRebuilding
+        exp_alerts:
+          - exp_labels:
+              severity: info
+              kind: Trickplay
+            exp_annotations:
+              summary: "No Trickplay job was rebuilt for another vendor's GPU in 6h (360 skipped)"
+              description: >-
+                A tentacle with another vendor's GPU was picked and every rebuild was skipped,
+                so those jobs ran as Jellyfin built them. skipped:no-match or skipped:changed
+                after a Jellyfin upgrade usually means Jellyfin builds these command lines
+                differently now, and cross-vendor needs a Tentacle release that follows it.
+                skipped:error is in the Jellyfin log; skipped:unavailable means the tentacle
+                went before the job started. tentacle_cross_vendor_total{outcome} says which.
+      - eval_time: 5h30m
+        alertname: TentacleCrossVendorRefused
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              node: coruscant
+              kind: Transcode
+            exp_annotations:
+              summary: "A Transcode job rebuilt for coruscant was refused"
+              description: >-
+                The plugin recorded the command line it rebuilt for that tentacle, and the
+                shim brought another one for the same output, so the broker ran neither and
+                the job failed. Something changed the command line between Jellyfin and the
+                shim (another plugin, a wrapper), or something else is using the broker's
+                socket. The Jellyfin log has a "refused a transcode for <output>" warning, and
+                the dashboard page lists the job (reason cross-vendor-mismatch) with the command
+                line the shim brought.
+      - eval_time: 6h50m
+        alertname: TentacleCrossVendorRefused
+        exp_alerts: []

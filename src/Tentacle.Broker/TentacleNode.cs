@@ -44,7 +44,12 @@ public enum NodeState
 /// <param name="Ok">Whether it passed.</param>
 /// <param name="Detail">What was found.</param>
 /// <param name="Required">Whether failing it degrades the tentacle (otherwise it only narrows its jobs).</param>
-public sealed record NodeCheck(string Name, bool Ok, string Detail, bool Required = true);
+/// <param name="Skipped">
+/// Not run, because it does not apply to this tentacle (the server's hardware test on
+/// a tentacle with no GPU or another vendor's): not a failure, <paramref name="Detail"/>
+/// says why. Ok is false, so the tentacle takes no job that needs it; metrics leave it out.
+/// </param>
+public sealed record NodeCheck(string Name, bool Ok, string Detail, bool Required = true, bool Skipped = false);
 
 /// <summary>
 /// A slot reservation for one job; released when the job ends.

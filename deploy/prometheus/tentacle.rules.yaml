@@ -116,6 +116,39 @@ groups:
             Raise TENTACLE_MAX_JOBS / TENTACLE_MAX_BACKGROUND_JOBS on the tentacles if they
             have headroom, or add one.
 
+      # Cross-vendor: a job picked for a tentacle with another vendor's GPU whose
+      # rebuild never happens runs on the server's vendor instead, quietly.
+      - alert: TentacleCrossVendorNotRebuilding
+        expr: |
+          sum by (kind) (increase(tentacle_cross_vendor_total{outcome=~"skipped:.*"}[6h])) >= 3
+          unless on (kind) sum by (kind) (increase(tentacle_cross_vendor_total{outcome=~"rebuilt|shadow"}[6h])) > 0
+        labels:
+          severity: info
+        annotations:
+          summary: "No {{ $labels.kind }} job was rebuilt for another vendor's GPU in 6h ({{ $value | printf \"%.0f\" }} skipped)"
+          description: >-
+            A tentacle with another vendor's GPU was picked and every rebuild was skipped,
+            so those jobs ran as Jellyfin built them. skipped:no-match or skipped:changed
+            after a Jellyfin upgrade usually means Jellyfin builds these command lines
+            differently now, and cross-vendor needs a Tentacle release that follows it.
+            skipped:error is in the Jellyfin log; skipped:unavailable means the tentacle
+            went before the job started. tentacle_cross_vendor_total{outcome} says which.
+
+      - alert: TentacleCrossVendorRefused
+        expr: sum by (node, kind) (increase(tentacle_cross_vendor_total{outcome=~"refused:.*"}[1h])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "A {{ $labels.kind }} job rebuilt for {{ $labels.node }} was refused"
+          description: >-
+            The plugin recorded the command line it rebuilt for that tentacle, and the
+            shim brought another one for the same output, so the broker ran neither and
+            the job failed. Something changed the command line between Jellyfin and the
+            shim (another plugin, a wrapper), or something else is using the broker's
+            socket. The Jellyfin log has a "refused a transcode for <output>" warning, and
+            the dashboard page lists the job (reason cross-vendor-mismatch) with the command
+            line the shim brought.
+
       - alert: TentacleBrokerDown
         expr: absent(tentacle_broker_up == 1)
         for: 10m

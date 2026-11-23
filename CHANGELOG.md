@@ -3,6 +3,22 @@
 Every artifact (the plugin, the `tentacle` binary and the worker mod image) shares one
 version. The plugin's own changelog in `build.yaml` carries the latest entry.
 
+## Unreleased
+
+- New metric `tentacle_cross_vendor_mode{mode}`: the cross-vendor mode in effect (its own
+  setting, never further than `tentacle_placement_mode`).
+- A check that does not apply to a tentacle (the server's hardware test on one with no GPU
+  or another vendor's GPU) is marked as not tested instead of failed: the plugin's page
+  shows it as such, the verification log line no longer lists it as a failure, and
+  `tentacle_node_check` leaves it out (it was an optional check at 0, which dashboards
+  showed as failing for good).
+- New alerts: `TentacleCrossVendorNotRebuilding` (jobs picked for another vendor's GPU for
+  6h and none rebuilt, the usual sign that a Jellyfin upgrade changed its command lines)
+  and `TentacleCrossVendorRefused`.
+- The Grafana board has a Cross-vendor row (decisions over time and over the range, by
+  outcome), the cross-vendor mode beside the placement mode, job durations by kind and
+  node, and each tentacle's GPU in the nodes table.
+
 ## 2.2.0
 
 Tried first as 2.2.0-beta1, a pre-release. A beta install carries the same plugin

@@ -37,6 +37,7 @@ public sealed class TentacleMetrics
     private readonly Dictionary<string, string[]> _runningSeries = new(StringComparer.Ordinal);
     private readonly Gauge _brokerUp;
     private readonly Gauge _mode;
+    private readonly Gauge _crossVendorMode;
     private readonly Gauge _server;
     private readonly Lock _lock = new();
     private readonly HashSet<string> _known = new(StringComparer.Ordinal);
@@ -112,6 +113,10 @@ public sealed class TentacleMetrics
             "tentacle_placement_mode",
             "1 for the configured placement mode (Disabled, DryRun, Active).",
             new GaugeConfiguration { LabelNames = ["mode"] });
+        _crossVendorMode = factory.CreateGauge(
+            "tentacle_cross_vendor_mode",
+            "1 for the cross-vendor mode in effect (Disabled, DryRun, Active): its own setting, never further than tentacle_placement_mode.",
+            new GaugeConfiguration { LabelNames = ["mode"] });
         _server = factory.CreateGauge(
             "tentacle_server_info",
             "1, labelled with this server's name (it is node=\"local\" elsewhere) and its role: worker (competes for jobs), backup (only what no tentacle can take) or never.",
@@ -180,7 +185,8 @@ public sealed class TentacleMetrics
     /// <param name="brokerUp">Whether the broker listens.</param>
     /// <param name="mode">The placement mode.</param>
     /// <param name="local">This server's seat: its slots and load appear as node "local".</param>
-    public void Refresh(IReadOnlyCollection<TentacleNode> nodes, bool brokerUp, PlacementMode mode, LocalSeat? local = null)
+    /// <param name="crossVendor">The cross-vendor mode in effect.</param>
+    public void Refresh(IReadOnlyCollection<TentacleNode> nodes, bool brokerUp, PlacementMode mode, LocalSeat? local = null, PlacementMode crossVendor = PlacementMode.Disabled)
     {
         ArgumentNullException.ThrowIfNull(nodes);
         _brokerUp.Set(brokerUp ? 1 : 0);
@@ -195,6 +201,7 @@ public sealed class TentacleMetrics
         foreach (var m in Modes)
         {
             _mode.WithLabels(m).Set(string.Equals(m, mode.ToString(), StringComparison.Ordinal) ? 1 : 0);
+            _crossVendorMode.WithLabels(m).Set(string.Equals(m, crossVendor.ToString(), StringComparison.Ordinal) ? 1 : 0);
         }
 
         lock (_lock)
@@ -259,7 +266,7 @@ public sealed class TentacleMetrics
 
                 var checks = _checks.TryGetValue(name, out var seen) ? seen : _checks[name] = new HashSet<string>(StringComparer.Ordinal);
                 var current = new HashSet<string>(StringComparer.Ordinal);
-                foreach (var check in snapshot.Checks)
+                foreach (var check in snapshot.Checks.Where(c => !c.Skipped))
                 {
                     var required = check.Required ? "true" : "false";
                     current.Add(check.Name + "\0" + required);

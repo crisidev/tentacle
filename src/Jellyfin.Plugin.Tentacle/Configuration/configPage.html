@@ -518,8 +518,11 @@
                                 : c.Name === 'ffmpeg' ? 'Same ffmpeg as this server'
                                 : c.Name === 'uid' ? 'Writes files as the same user'
                                 : c.Name.indexOf('hardware:') === 0 ? 'GPU self-test (' + esc(c.Name.substring(9)) + ')' : esc(c.Name);
-                            var mark = c.Ok ? '<span aria-label="passed">✓</span>' : '<span aria-label="failed" style="color:var(--t-' + (c.Required ? 'bad' : 'warn') + ')">✗</span>';
-                            var why = c.Ok ? '' : '<span class="t-why">' + esc(c.Detail) + (c.Required ? '' : '. Optional: only jobs that need it stay on this server.') + '</span>';
+                            var mark = c.Ok ? '<span aria-label="passed">✓</span>'
+                                : c.Skipped ? '<span aria-label="not tested" style="color:var(--t-muted)">–</span>'
+                                : '<span aria-label="failed" style="color:var(--t-' + (c.Required ? 'bad' : 'warn') + ')">✗</span>';
+                            var why = c.Ok ? '' : '<span class="t-why">' + (c.Skipped ? 'Not tested: ' : '') + esc(c.Detail)
+                                + (c.Required || c.Skipped ? '' : '. Optional: only jobs that need it stay on this server.') + '</span>';
                             return '<li>' + mark + '<span>' + label + '</span>' + why + '</li>';
                         }).join('');
                         return '<article class="t-node">'
