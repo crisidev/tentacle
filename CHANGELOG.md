@@ -3,7 +3,7 @@
 Every artifact (the plugin, the `tentacle` binary and the worker mod image) shares one
 version. The plugin's own changelog in `build.yaml` carries the latest entry.
 
-## Unreleased
+## 2.2.1
 
 - New metric `tentacle_cross_vendor_mode{mode}`: the cross-vendor mode in effect (its own
   setting, never further than `tentacle_placement_mode`).

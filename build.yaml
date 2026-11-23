@@ -5,7 +5,7 @@
 # The full history is in CHANGELOG.md; scripts/release.sh reads the release notes from it.
 name: "Tentacle"
 guid: "3a65d525-990c-4f73-89e9-a0d1500a53d2"
-version: "2.2.0.1"
+version: "2.2.1.1"
 # The 12 build; scripts/build.sh also builds net9.0 for targetAbi 10.11.0.0.
 targetAbi: "12.1.0.0"
 framework: "net10.0"
@@ -24,7 +24,7 @@ artifacts:
   - "tentacle-amd64"
   - "tentacle-arm64"
 changelog: >
-  2.2.0: Experimental cross-vendor placement (Jellyfin 12.1+, off by default)
-  covers trickplay too: a trickplay job may run on a tentacle with another
-  vendor's GPU, rebuilt by Jellyfin for that GPU, under the same Off / Shadow /
-  Active setting as transcodes. See CHANGELOG.md for the history.
+  2.2.1: Cross-vendor in the metrics, Grafana board and alerts: the cross-vendor
+  mode in effect is exported, a check that does not apply to a tentacle is shown
+  as not tested instead of failed, and two alerts watch cross-vendor rebuilds.
+  See CHANGELOG.md for the history.
