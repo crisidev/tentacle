@@ -3,12 +3,11 @@
 Every artifact (the plugin, the `tentacle` binary and the worker mod image) shares one
 version. The plugin's own changelog in `build.yaml` carries the latest entry.
 
-## 2.1.0-beta1
+## 2.1.0
 
-A pre-release: GitHub's "latest" release (and so the plugin repository URL) stays on
-2.0.3, and Jellyfin will not offer it. Install it by hand from its release page. The
-plugin inside is version 2.1.0.1 (2.1.0.0 for Jellyfin 10.11), the same as the final
-2.1.0 will be, so moving a beta install to 2.1.0 is by hand too.
+Tried first as 2.1.0-beta1, a pre-release. A beta install carries the same plugin
+version as this release (2.1.0.1, 2.1.0.0 for Jellyfin 10.11), so Jellyfin does not
+replace it: install 2.1.0 by hand once, then it updates itself as before.
 
 - Experimental, Jellyfin 12.1+, Off by default: **cross-vendor transcoding**, with its
   own Off / Shadow / Active setting that never goes further than "Where jobs run" (the
