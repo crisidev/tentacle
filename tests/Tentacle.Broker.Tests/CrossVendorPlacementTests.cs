@@ -307,10 +307,40 @@ public class CrossVendorPlacementTests
     [InlineData(PlacementMode.DryRun, PlacementMode.DryRun, PlacementMode.DryRun)]
     [InlineData(PlacementMode.Disabled, PlacementMode.Active, PlacementMode.Disabled)]
     [InlineData(PlacementMode.Disabled, PlacementMode.DryRun, PlacementMode.Disabled)]
+    [InlineData(PlacementMode.DryRun, PlacementMode.Disabled, PlacementMode.Disabled)]
+    [InlineData(PlacementMode.Disabled, PlacementMode.Disabled, PlacementMode.Disabled)]
     public void CrossVendorNeverGoesFurtherThanWhereJobsRun(PlacementMode overall, PlacementMode own, PlacementMode effective)
     {
         Assert.Equal(effective, Broker.EffectiveCrossVendor(overall, own));
         Assert.Equal(effective, BrokerWith(overall, own).CrossVendorMode);
+    }
+
+    [Fact]
+    public void PlacementModesAreOrderedFromLeastToMost()
+    {
+        // EffectiveCrossVendor takes the smaller of two modes: that only caps cross-vendor
+        // transcoding while the values stay in this order.
+        Assert.Equal([PlacementMode.Disabled, PlacementMode.DryRun, PlacementMode.Active], Enum.GetValues<PlacementMode>());
+        Assert.Equal(0, (int)PlacementMode.Disabled);
+        Assert.Equal(1, (int)PlacementMode.DryRun);
+        Assert.Equal(2, (int)PlacementMode.Active);
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(3)]
+    [InlineData(99)]
+    public void ANumberThatNamesNoModeIsOff(int value)
+    {
+        var unknown = (PlacementMode)value;
+        var options = new BrokerOptions { Placement = unknown, CrossVendor = unknown };
+        Assert.Equal(PlacementMode.Disabled, options.Placement);
+        Assert.Equal(PlacementMode.Disabled, options.CrossVendor);
+
+        // Unknown on either side never makes cross-vendor transcoding go further.
+        Assert.Equal(PlacementMode.Disabled, Broker.EffectiveCrossVendor(unknown, PlacementMode.Active));
+        Assert.Equal(PlacementMode.Disabled, Broker.EffectiveCrossVendor(PlacementMode.Active, unknown));
+        Assert.Equal(PlacementMode.Disabled, BrokerWith(PlacementMode.Active, unknown).CrossVendorMode);
     }
 
     [Fact]

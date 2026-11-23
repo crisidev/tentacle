@@ -8,24 +8,26 @@ using Tentacle.Protocol;
 namespace Tentacle.Broker;
 
 /// <summary>
-/// How the broker places jobs.
+/// How the broker places jobs. The values are ordered, from doing least to doing most:
+/// <see cref="Broker.EffectiveCrossVendor"/> takes the smaller of two modes, so a new
+/// mode must keep that order (a test pins it).
 /// </summary>
 public enum PlacementMode
 {
     /// <summary>
     /// Every job runs locally and nothing is recorded.
     /// </summary>
-    Disabled,
+    Disabled = 0,
 
     /// <summary>
     /// Shadow mode: record where each job would have run, but run everything locally.
     /// </summary>
-    DryRun,
+    DryRun = 1,
 
     /// <summary>
     /// Jobs run on tentacles according to the scheduler.
     /// </summary>
-    Active,
+    Active = 2,
 }
 
 /// <summary>
@@ -75,6 +77,9 @@ public sealed record JobAttribution(string? User, string? Client, string? Item, 
 /// </summary>
 public sealed class BrokerOptions
 {
+    private PlacementMode _placement = PlacementMode.DryRun;
+    private PlacementMode _crossVendor = PlacementMode.Disabled;
+
     /// <summary>
     /// Gets or sets the unix socket the shims connect to.
     /// </summary>
@@ -109,9 +114,14 @@ public sealed class BrokerOptions
     public Func<X509Certificate2?> Certificate { get; set; } = () => null;
 
     /// <summary>
-    /// Gets or sets the placement mode.
+    /// Gets or sets the placement mode. A value that is not a <see cref="PlacementMode"/>
+    /// (a number posted to the configuration API) becomes <see cref="PlacementMode.Disabled"/>.
     /// </summary>
-    public PlacementMode Placement { get; set; } = PlacementMode.DryRun;
+    public PlacementMode Placement
+    {
+        get => _placement;
+        set => _placement = Known(value);
+    }
 
     /// <summary>
     /// Gets or sets the ping interval for agents.
@@ -209,8 +219,13 @@ public sealed class BrokerOptions
     /// Gets or sets how far cross-vendor transcoding goes, on its own: off, shadow
     /// (rebuilt command lines are recorded, jobs run as built), or active. It never goes
     /// further than <see cref="Placement"/>: see <see cref="Broker.EffectiveCrossVendor"/>.
+    /// A value that is not a <see cref="PlacementMode"/> becomes <see cref="PlacementMode.Disabled"/>.
     /// </summary>
-    public PlacementMode CrossVendor { get; set; } = PlacementMode.Disabled;
+    public PlacementMode CrossVendor
+    {
+        get => _crossVendor;
+        set => _crossVendor = Known(value);
+    }
 
     /// <summary>
     /// Gets or sets how to find out who and what a job is for (the host's sessions
@@ -218,6 +233,15 @@ public sealed class BrokerOptions
     /// retried briefly while it runs.
     /// </summary>
     public Func<ArgvAnalysis, JobAttribution?> Attribute { get; set; } = _ => null;
+
+    /// <summary>
+    /// A mode the broker knows: anything else (a number that names no mode, from a
+    /// configuration file or the configuration API) is <see cref="PlacementMode.Disabled"/>,
+    /// the mode that does least.
+    /// </summary>
+    /// <param name="mode">The mode as given.</param>
+    /// <returns>The mode, or <see cref="PlacementMode.Disabled"/>.</returns>
+    public static PlacementMode Known(PlacementMode mode) => Enum.IsDefined(mode) ? mode : PlacementMode.Disabled;
 
     /// <summary>
     /// Which configured token a presented one is, compared in constant time.

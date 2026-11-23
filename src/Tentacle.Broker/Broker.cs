@@ -125,13 +125,13 @@ public sealed partial class Broker
     /// <summary>
     /// Cross-vendor transcoding's effective mode: the lesser of where jobs run overall and
     /// its own setting (off &lt; shadow &lt; active). Shadow overall makes it shadow at
-    /// most; off overall turns it off.
+    /// most; off overall turns it off. A value that names no mode counts as off.
     /// </summary>
     /// <param name="placement">Where jobs run overall.</param>
     /// <param name="crossVendor">Cross-vendor transcoding's own setting.</param>
     /// <returns>The effective mode.</returns>
     public static PlacementMode EffectiveCrossVendor(PlacementMode placement, PlacementMode crossVendor)
-        => (PlacementMode)Math.Min((int)placement, (int)crossVendor);
+        => (PlacementMode)Math.Min((int)BrokerOptions.Known(placement), (int)BrokerOptions.Known(crossVendor));
 
     /// <summary>
     /// Records that the host rebuilt (or, in shadow mode, would have rebuilt) the
