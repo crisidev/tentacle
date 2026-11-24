@@ -316,4 +316,4 @@ records the rebuild in the job's details.
 
 Not covered yet: subtitle and attachment extraction and audio analysis (they use no GPU,
 so any tentacle already takes them), HDR sources, Jellyfin 10.11, and Intel tentacles of an AMD or NVIDIA server (Intel tentacles report QSV, which
-is not a rebuild target). Testing on NVIDIA and AMD hardware is welcome.
+is not a rebuild target). Tested on AMD (VAAPI, Renoir) for playback and trickplay; testing on NVIDIA hardware is welcome.

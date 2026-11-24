@@ -46,6 +46,9 @@ one.
   Tentacle.
 * **Knows your GPUs.** Each tentacle finds its Intel, AMD or NVIDIA GPUs and measures
   what they can encode and decode.
+* **Mixes GPU vendors** (experimental, Jellyfin 12.1+): an AMD or NVIDIA tentacle can
+  take playback transcodes and trickplay from an Intel server. Jellyfin builds each job
+  again for that tentacle's GPU, and the plugin checks the rebuild before it runs.
 * **A dashboard page** in Jellyfin shows every tentacle, its checks, and every job with
   where it ran and why. Prometheus metrics, alerts and a Grafana board come with it.
 * **Secure by default**: encrypted connections, a token you can rotate, and jobs locked
@@ -71,9 +74,12 @@ one.
   transcoding** (experimental, Jellyfin 12.1+, off by default), playback transcodes of
   SDR sources and trickplay can also run on AMD (VAAPI) or NVIDIA (NVENC) tentacles of an
   Intel server: Jellyfin builds them again for that GPU
-  ([how](docs/architecture.md#other-gpu-vendors-cross-vendor-transcoding)).
-* Hardware transcoding is tested on Intel (QSV and VAAPI). AMD and NVIDIA are detected
-  but not yet tested for real jobs; reports are very welcome.
+  ([how](docs/architecture.md#other-gpu-vendors-cross-vendor-transcoding)). HDR sources
+  still need the server's vendor, and the server must be the Intel one. On AMD, trickplay encodes its tiles on the CPU (AMD has no
+  VAAPI JPEG encoder), so it is slower there than on Intel.
+* Hardware transcoding is tested on Intel (QSV and VAAPI), and on AMD (VAAPI) as a
+  cross-vendor tentacle of an Intel server. NVIDIA is detected but not yet tested for
+  real jobs; reports are very welcome.
 
 ## Getting started
 
@@ -136,14 +142,14 @@ Every setting is described in [docs/configuration.md](docs/configuration.md).
 | State | a database on shared storage; killed jobs leave rows behind | none: a job ends with its connections |
 | Worker health | not tracked | registration, heartbeats, drain on shutdown, cooldown after failures |
 | Checks before a job | none | shared folders, ffmpeg version, GPU self-test |
-| Choosing a worker | fewest running jobs, by host weight | least load by weight and job cost, background slots, GPU vendor |
+| Choosing a worker | fewest running jobs, by host weight | least load by weight and job cost, background slots, GPU vendor (or a job rebuilt for another vendor's GPU) |
 | Visibility | none | dashboard page, Prometheus metrics, alerts, Grafana board |
 | On the worker, a job can touch | anything the ssh user can | only the shared folders |
 | Setup | ssh keys, a config file, a database | a plugin, a `DOCKER_MODS` per worker, and a token |
 
 ## Roadmap
 
-✅ done 🕖 in progress 🌍 future
+✅ done 🧪 experimental 🕖 in progress 🌍 future
 
 * ✅ Playback transcodes, extraction, trickplay and analysis on tentacles
 * ✅ Shared-folder, ffmpeg and GPU checks
@@ -152,9 +158,9 @@ Every setting is described in [docs/configuration.md](docs/configuration.md).
 * ✅ GPU detection, one tentacle per GPU, arm64
 * ✅ The server as a backup, a worker, or neither
 * 🧪 Hardware transcodes on any GPU vendor: Jellyfin builds each job for the GPU that
-  runs it. Experimental for playback transcodes and trickplay
-  ([how](docs/architecture.md#other-gpu-vendors-cross-vendor-transcoding)); HDR sources
-  still need the server's vendor
+  runs it. Experimental for playback transcodes and trickplay from an Intel server,
+  tested on AMD ([how](docs/architecture.md#other-gpu-vendors-cross-vendor-transcoding));
+  HDR sources still need the server's vendor
 * ✅ A Jellyfin plugin repository: the server needs no mod
 * 🌍 Worker weights measured automatically
 
@@ -164,7 +170,8 @@ Every setting is described in [docs/configuration.md](docs/configuration.md).
   without the LinuxServer image, shadow mode, uninstalling
 * [Configuration](docs/configuration.md): every setting, shared folders, what runs
   where, GPUs
-* [Observability](docs/observability.md): metrics, logs, alerts, Grafana
+* [Observability](docs/observability.md): metrics, logs, alerts, Grafana (with a
+  cross-vendor row)
 * [Security](docs/security.md): how tentacles and jobs are protected
 * [Troubleshooting](docs/troubleshooting.md): why a job ran where it did
 * [Architecture](docs/architecture.md): how it works inside
